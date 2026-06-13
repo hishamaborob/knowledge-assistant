@@ -1,0 +1,43 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+
+# Secrets — never commit these
+application-local.yml
+*.env
+.env*
+*.pem
+*.key
+secrets/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfvars
+!*.tfvars.example
+
+# Docker volumes
+docker/local/postgres-data/
+docker/local/localstack-data/
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar

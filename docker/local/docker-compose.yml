@@ -1,0 +1,73 @@
+services:
+
+  postgres:
+    # pgvector/pgvector:pg16 = official PostgreSQL 16 with pgvector pre-installed.
+    # Alternative: postgres:16 + manual extension install in init scripts.
+    # This image is maintained by the pgvector project and tracks pgvector releases.
+    image: pgvector/pgvector:pg16
+    container_name: ka-postgres
+    environment:
+      POSTGRES_DB: knowledge_assistant
+      POSTGRES_USER: ka_user
+      POSTGRES_PASSWORD: ka_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d  # optional: custom init scripts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ka_user -d knowledge_assistant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # LocalStack: AWS service emulation for local dev (S3, Secrets Manager).
+  # Added now so Phase 3 (S3 upload) has a local target without real AWS.
+  localstack:
+    image: localstack/localstack:3.x
+    container_name: ka-localstack
+    environment:
+      SERVICES: s3,secretsmanager
+      DEFAULT_REGION: us-east-1
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - ./localstack-init:/etc/localstack/init/ready.d
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4566/_localstack/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus: scrapes /actuator/prometheus on the Spring Boot app.
+  # Only active when explicitly profiled: docker compose --profile monitoring up
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ka-prometheus
+    profiles: ["monitoring"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  # Grafana: visualization. Dashboards in Phase 9.
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ka-grafana
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  localstack_data:
+  grafana_data:

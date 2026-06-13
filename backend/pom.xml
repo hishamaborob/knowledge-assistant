@@ -1,0 +1,496 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        Spring Boot parent manages:
+        - Dependency versions for the Spring ecosystem (no explicit version needed for most)
+        - Plugin versions and configurations (compiler, surefire, failsafe)
+        - Resource filtering and build defaults
+        Using 3.4.x: includes Spring 6.2, Hibernate 6.6, virtual thread support
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.kbassistant</groupId>
+    <artifactId>knowledge-assistant</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>knowledge-assistant</name>
+    <description>Production-grade RAG application — Java 21, Spring AI, pgvector</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <!-- Spring AI BOM version — pin here, used in dependencyManagement below -->
+        <spring-ai.version>1.0.0-M6</spring-ai.version>
+        <!-- AWS SDK v2 BOM — v1 is EOL; v2 is async-first and modular -->
+        <aws-sdk.version>2.26.0</aws-sdk.version>
+        <!-- PDFBox 3.x — complete rewrite, non-forking renderer, Apache 2.0 -->
+        <pdfbox.version>3.0.3</pdfbox.version>
+        <!-- Apache Tika — content-type detection + extraction facade -->
+        <tika.version>2.9.2</tika.version>
+        <!-- ArchUnit — architecture fitness functions in tests -->
+        <archunit.version>1.3.0</archunit.version>
+        <!-- Resilience4j — circuit breaker, retry, bulkhead for LLM calls -->
+        <resilience4j.version>2.2.0</resilience4j.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Spring AI BOM: pins versions of all spring-ai-* artifacts.
+                Must come BEFORE aws-sdk BOM if both define overlapping transitive deps.
+                Spring AI 1.0.0 ships with tested versions of Spring 6.2 + Reactor Core.
+            -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!--
+                AWS SDK v2 BOM: modular SDK, each service is a separate artifact.
+                Import here so individual aws-sdk entries below need no version.
+            -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!--
+                Resilience4j BOM: pins circuit breaker, retry, bulkhead versions.
+                Spring Boot parent does NOT manage resilience4j versions.
+            -->
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-bom</artifactId>
+                <version>${resilience4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+
+        <!-- ================================================================
+             SPRING BOOT STARTERS
+             ================================================================ -->
+
+        <!--
+            Web: Tomcat + Spring MVC + Jackson. With spring.threads.virtual.enabled=true
+            (Java 21), Tomcat uses virtual threads per request — no async complexity needed.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+            Data JPA: Hibernate 6.6 + HikariCP + Spring Data repositories.
+            Hibernate 6 natively maps UUID columns — no @Type workaround needed.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!--
+            Actuator: /health, /info, /prometheus, /metrics.
+            Production MUST NOT expose all endpoints — see application.yml for what's exposed.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!--
+            Validation: Bean Validation 3.0 (Jakarta) via Hibernate Validator.
+            Used in request DTOs — @NotBlank, @Size, @Valid on controller params.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+            AOP: required for @Retryable (Spring Retry) and Resilience4j annotations.
+            Without this, @CircuitBreaker/@Retry annotations are silently ignored.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             SPRING AI — LLM AND VECTOR STORE
+             ================================================================ -->
+
+        <!--
+            OpenAI: ChatModel (gpt-4o) + EmbeddingModel (text-embedding-3-small/large).
+            Default provider for both chat and embeddings.
+            Activated by: app.llm.provider=openai
+        -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+            <version>${spring-ai.version}</version>
+        </dependency>
+
+        <!--
+            Anthropic Claude: ChatModel only (no embedding API from Anthropic).
+            Claude 3.5 Sonnet is competitive with GPT-4o for RAG use cases.
+            Activated by: app.llm.provider=anthropic
+        -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-anthropic-spring-boot-starter</artifactId>
+            <version>${spring-ai.version}</version>
+        </dependency>
+
+        <!--
+            Google Vertex AI Gemini: ChatModel (gemini-1.5-pro).
+            Requires GCP project + Vertex AI enabled. Longest context window (1M tokens).
+            Activated by: app.llm.provider=gemini
+        -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-vertex-ai-gemini-spring-boot-starter</artifactId>
+            <version>${spring-ai.version}</version>
+        </dependency>
+
+        <!--
+            pgvector VectorStore: Spring AI's VectorStore backed by PostgreSQL pgvector.
+            Handles vector persistence and similarity search via Spring AI's abstraction.
+            We also implement our own VectorStorePort for custom queries (Phase 5).
+        -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-pgvector-store-spring-boot-starter</artifactId>
+            <version>${spring-ai.version}</version>
+        </dependency>
+
+        <!-- ================================================================
+             DATABASE
+             ================================================================ -->
+
+        <!--
+            PostgreSQL JDBC driver: runtime only, no compile-time dependency.
+        -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+            Flyway core + PostgreSQL dialect support.
+            Schema migrations are applied at startup — no manual SQL scripts.
+            flyway-database-postgresql is required for Flyway 10+ PostgreSQL dialect.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             AWS SDK v2
+             ================================================================ -->
+
+        <!--
+            S3: document storage. Using transfer manager for large file uploads (Phase 3).
+            Using presigned URLs for client downloads (never proxy large files through app).
+        -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+
+        <!--
+            Secrets Manager: fetch DB credentials and API keys at runtime.
+            In production, environment variables NEVER contain plaintext secrets.
+        -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+        </dependency>
+
+        <!--
+            URL connection client: lightweight HTTP client for AWS SDK.
+            Alternative to apache-client or netty-nio-client.
+            Use apache-client if you need connection pool tuning (Phase 10).
+        -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             DOCUMENT PARSING
+             ================================================================ -->
+
+        <!--
+            PDFBox 3.x: PDF text extraction. Apache 2.0. Runs in-process, no native deps.
+            Tradeoff vs alternatives:
+            - iText: AGPL unless commercial license (expensive)
+            - pdfminer (Python): not applicable in JVM
+            - PDFBox: best open-source JVM option, handles most PDFs well
+        -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
+        </dependency>
+
+        <!--
+            Tika: MIME type detection and extraction facade.
+            We use it for type detection and as fallback extractor.
+            NOT pulling in the full tika-parsers-standard-package in Phase 1 —
+            it's large (~100MB transitive). Adding in Phase 3 when extraction is implemented.
+        -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+
+        <!-- ================================================================
+             RESILIENCE
+             ================================================================ -->
+
+        <!--
+            Resilience4j Spring Boot 3 integration.
+            Provides @CircuitBreaker, @Retry, @RateLimiter, @Bulkhead annotations.
+            Critical for LLM provider calls — external HTTP, high latency, rate-limited.
+        -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+        </dependency>
+
+        <!--
+            Spring Retry: @Retryable + @Recover for simpler retry cases.
+            Used for OpenAI rate limit (429) retries with exponential backoff.
+            Resilience4j is for circuit breakers; Spring Retry for simple retries.
+        -->
+        <dependency>
+            <groupId>org.springframework.retry</groupId>
+            <artifactId>spring-retry</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             OBSERVABILITY
+             ================================================================ -->
+
+        <!--
+            Prometheus registry: exposes metrics at /actuator/prometheus in Prometheus format.
+            Prometheus scrapes this endpoint; Grafana visualizes it.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!--
+            OpenTelemetry tracing bridge: connects Micrometer Tracing to OTel exporters.
+            Required for distributed trace IDs in logs and spans.
+            Without this, logs lack trace correlation.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             API DOCUMENTATION
+             ================================================================ -->
+
+        <!--
+            SpringDoc OpenAPI: generates /swagger-ui.html and /v3/api-docs automatically.
+            Reads @Operation, @Schema annotations from controllers/DTOs.
+            Production note: disable Swagger UI in prod (springdoc.swagger-ui.enabled=false).
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.7.0</version>
+        </dependency>
+
+        <!-- ================================================================
+             UTILITIES
+             ================================================================ -->
+
+        <!--
+            Lombok: compile-time annotation processor for @Data, @Builder, @Slf4j etc.
+            Used in infrastructure/api layers. NOT used in domain (explicit constructors
+            make domain intent clearer and avoid Lombok version conflicts on upgrade).
+        -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ================================================================
+             TEST DEPENDENCIES
+             ================================================================ -->
+
+        <!--
+            Spring Boot Test: @SpringBootTest, MockMvc, @MockBean, WebTestClient.
+            Includes JUnit 5, AssertJ, Mockito — the full test toolkit.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Testcontainers JUnit 5 integration: @Testcontainers + @Container lifecycle management.
+            Starts Docker containers before tests, stops after — no manual cleanup.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Testcontainers PostgreSQL module: PostgreSQLContainer with image config.
+            We use pgvector/pgvector:pg16 image (includes pgvector extension pre-installed).
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            ArchUnit JUnit 5: architectural fitness functions.
+            Rules like "domain must not import Spring" fail the build if violated.
+            This is the most important test in the codebase for long-term maintainability.
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                Spring Boot Maven Plugin: packages the fat JAR, adds build info to /actuator/info.
+                excludes Lombok from the final artifact (it's compile-time only).
+                repackage goal runs automatically in the package phase via spring-boot parent.
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                    <!-- Enables /actuator/info build metadata -->
+                    <additionalProperties>
+                        <encoding.source>UTF-8</encoding.source>
+                    </additionalProperties>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build-info</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--
+                Maven Compiler Plugin: Java 21, -parameters flag required by Spring
+                for method parameter reflection (used by @RequestParam, Spring AI, etc.).
+                Without -parameters, Spring falls back to ASM bytecode inspection which
+                can fail on some code patterns.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <!--
+                                annotationProcessorPaths resolves versions independently
+                                of dependencyManagement — without an explicit version here,
+                                Maven may pull a stale cached version incompatible with Java 21.
+                                ${lombok.version} is defined by spring-boot-starter-parent.
+                            -->
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!--
+                Surefire: runs unit tests (*Test.java).
+                Excludes *IT.java — those are integration tests run by Failsafe.
+                Configured for JUnit 5 platform.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*IT.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!--
+                Failsafe: runs integration tests (*IT.java) in the verify phase.
+                Integration tests start Testcontainers (Docker) — slower than unit tests.
+                Run with: mvn verify
+                Skip with: mvn test (unit tests only)
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+
+</project>

@@ -19,9 +19,10 @@ spring:
 
   jpa:
     hibernate:
-      # validate: Hibernate checks schema matches entities but never touches DDL.
-      # Flyway owns the schema — never use create/update in production.
-      ddl-auto: validate
+      # none: Flyway owns the schema entirely. Hibernate neither validates nor modifies DDL.
+      # Using validate here causes false negatives for custom types (e.g. pgvector's `vector`
+      # type is unknown to Hibernate's dialect and fails validation even when the column exists).
+      ddl-auto: none
     show-sql: false
     open-in-view: false  # Avoids lazy loading N+1s silently crossing transaction boundaries
     properties:

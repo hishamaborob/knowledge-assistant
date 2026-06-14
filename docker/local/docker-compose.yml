@@ -25,7 +25,7 @@ services:
   # LocalStack: AWS service emulation for local dev (S3, Secrets Manager).
   # Added now so Phase 3 (S3 upload) has a local target without real AWS.
   localstack:
-    image: localstack/localstack:3.x
+    image: localstack/localstack:3
     container_name: ka-localstack
     environment:
       SERVICES: s3,secretsmanager

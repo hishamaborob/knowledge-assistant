@@ -42,6 +42,11 @@ spring:
     validate-on-migrate: true
     out-of-order: false
 
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 52MB
+
   # Java 21 virtual threads: Tomcat uses one virtual thread per request.
   # No thread pool tuning needed for request handling.
   threads:

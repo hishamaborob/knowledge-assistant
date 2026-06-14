@@ -21,7 +21,8 @@ import static org.assertj.core.api.Assertions.*;
 /**
  * Proves that pgvector's HNSW index returns results in correct cosine similarity order.
  *
- * Test vectors use standard basis vectors (1.0 in one dimension, 0.0 elsewhere).
+ * Test vectors use standard basis vectors (1.0 in one dimension, 0.0 elsewhere) in
+ * 768-dimensional space (matching nomic-embed-text / OpenAI 3-small @ 768 dims).
  * Cosine similarity between standard basis vectors:
  *   - same vector: 1.0  (identical direction)
  *   - different vectors: 0.0  (orthogonal)
@@ -32,9 +33,11 @@ import static org.assertj.core.api.Assertions.*;
         "spring.ai.openai.api-key=sk-test",
         "spring.ai.anthropic.api-key=test",
         "spring.ai.vertex.ai.gemini.project-id=test",
+        "app.embedding.provider=openai",
         "spring.autoconfigure.exclude="
                 + "org.springframework.ai.autoconfigure.vertexai.gemini.VertexAiGeminiAutoConfiguration,"
-                + "org.springframework.ai.autoconfigure.anthropic.AnthropicAutoConfiguration"
+                + "org.springframework.ai.autoconfigure.anthropic.AnthropicAutoConfiguration,"
+                + "org.springframework.ai.autoconfigure.vectorstore.pgvector.PgVectorStoreAutoConfiguration"
 })
 @Testcontainers
 @Transactional
@@ -171,9 +174,9 @@ class VectorSimilaritySearchIT {
 
     // =========================================================================
 
-    /** Returns a 1536-dim unit vector with 1.0 at the given dimension index. */
+    /** Returns a 768-dim unit vector with 1.0 at the given dimension index. */
     private float[] basisVector(int dimension) {
-        float[] v = new float[1536];
+        float[] v = new float[768];
         v[dimension] = 1.0f;
         return v;
     }

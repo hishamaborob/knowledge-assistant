@@ -53,6 +53,13 @@ spring:
     virtual:
       enabled: true
 
+  # Exclude Spring AI's vectorstore auto-configuration — we use our own PgVectorAdapter.
+  # Without this exclusion, PgVectorStoreAutoConfiguration requires exactly one EmbeddingModel
+  # bean, which fails when both ollamaEmbeddingModel and openAiEmbeddingModel are on the classpath.
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.autoconfigure.vectorstore.pgvector.PgVectorStoreAutoConfiguration
+
   # Suppress auto-configuration for providers not active.
   # Without this, Spring AI fails at startup if API keys are missing
   # for providers we don't currently use.
@@ -66,6 +73,7 @@ spring:
       embedding:
         options:
           model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+          dimensions: 768  # text-embedding-3-small supports dimensions param; matches nomic-embed-text
     anthropic:
       api-key: ${ANTHROPIC_API_KEY:}
       chat:
@@ -79,11 +87,15 @@ spring:
           chat:
             options:
               model: ${GEMINI_CHAT_MODEL:gemini-1.5-pro}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      embedding:
+        model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
     vectorstore:
       pgvector:
         index-type: hnsw
         distance-type: cosine_distance
-        dimensions: 1536
+        dimensions: 768  # matches nomic-embed-text; OpenAI models configured to 768 via dimensions param
         initialize-schema: false  # Flyway owns schema, not Spring AI auto-init
 
 # Actuator: expose only what's needed. Never expose /env, /beans, /conditions in prod.
@@ -114,6 +126,10 @@ app:
   llm:
     # Active provider: openai | anthropic | gemini
     provider: ${LLM_PROVIDER:openai}
+  embedding:
+    # Active provider: ollama (local, free) | openai (production)
+    provider: ${EMBEDDING_PROVIDER:openai}
+    batch-size: 20
   storage:
     s3:
       bucket-name: ${S3_BUCKET_NAME:knowledge-assistant-docs-local}
@@ -121,8 +137,6 @@ app:
   chunking:
     chunk-size: ${CHUNK_SIZE:512}
     overlap: ${CHUNK_OVERLAP:64}
-  embedding:
-    batch-size: 20  # OpenAI allows up to 2048 per call; 20 is safe with rate limits
   similarity:
     threshold: 0.75  # Minimum cosine similarity score to include a chunk. Tune with eval.
     top-k: 10

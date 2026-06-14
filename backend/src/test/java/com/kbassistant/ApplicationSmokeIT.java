@@ -24,7 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         properties = {
                 "spring.ai.openai.api-key=sk-test-key",
                 "spring.ai.anthropic.api-key=test-key",
-                "spring.ai.vertex.ai.gemini.project-id=test-project"
+                "spring.ai.vertex.ai.gemini.project-id=test-project",
+                "app.embedding.provider=openai"
         }
 )
 @Testcontainers

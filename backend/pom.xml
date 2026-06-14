@@ -181,6 +181,17 @@
             <version>${spring-ai.version}</version>
         </dependency>
 
+        <!--
+            Ollama: local embedding model (nomic-embed-text, 768 dims) and chat model.
+            Used during development to avoid OpenAI API costs.
+            Activated by: app.embedding.provider=ollama (set in application-local.yml)
+        -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
+            <version>${spring-ai.version}</version>
+        </dependency>
+
         <!-- ================================================================
              DATABASE
              ================================================================ -->

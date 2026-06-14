@@ -28,14 +28,13 @@ public class DocumentChunkEntity {
     private String content;
 
     /**
-     * Vector embedding — 1536 dimensions for text-embedding-3-small.
+     * Vector embedding — 768 dimensions (nomic-embed-text / OpenAI 3-small with dimensions=768).
      *
-     * PgVectorType handles float[] ↔ PostgreSQL vector(1536) conversion.
-     * The columnDefinition is required so Flyway creates the right column type
-     * and so tools like EXPLAIN ANALYZE report the correct column.
+     * PgVectorType handles float[] ↔ PostgreSQL vector(768) conversion.
+     * The columnDefinition is required so tools like EXPLAIN ANALYZE report the correct column.
      */
     @Type(PgVectorType.class)
-    @Column(name = "embedding", columnDefinition = "vector(1536)")
+    @Column(name = "embedding", columnDefinition = "vector(768)")
     private float[] embedding;
 
     @Column(name = "token_count", nullable = false)

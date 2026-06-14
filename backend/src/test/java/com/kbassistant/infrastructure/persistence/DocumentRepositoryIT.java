@@ -20,9 +20,11 @@ import static org.assertj.core.api.Assertions.*;
         "spring.ai.openai.api-key=sk-test",
         "spring.ai.anthropic.api-key=test",
         "spring.ai.vertex.ai.gemini.project-id=test",
+        "app.embedding.provider=openai",
         "spring.autoconfigure.exclude="
                 + "org.springframework.ai.autoconfigure.vertexai.gemini.VertexAiGeminiAutoConfiguration,"
-                + "org.springframework.ai.autoconfigure.anthropic.AnthropicAutoConfiguration"
+                + "org.springframework.ai.autoconfigure.anthropic.AnthropicAutoConfiguration,"
+                + "org.springframework.ai.autoconfigure.vectorstore.pgvector.PgVectorStoreAutoConfiguration"
 })
 @Testcontainers
 @Transactional

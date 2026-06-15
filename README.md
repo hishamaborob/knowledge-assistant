@@ -21,10 +21,14 @@ See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for f
 ## Quick Start (Local)
 
 ```bash
-# Start PostgreSQL with pgvector
+# 1. Start PostgreSQL + LocalStack S3
 docker compose -f docker/local/docker-compose.yml up -d
 
-# Run the application
+# 2. Start Ollama and pull required models
+ollama pull nomic-embed-text   # 768-dim embeddings
+ollama pull llama3.2           # local chat LLM
+
+# 3. Run the application
 cd backend
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
@@ -54,16 +58,16 @@ cd backend
 
 | Phase | Description | Status |
 |---|---|---|
-| 1 | Project bootstrap — Spring Boot, Maven, Hexagonal skeleton | Planned |
-| 2 | PostgreSQL + pgvector — Flyway migrations, JPA entities | Planned |
-| 3 | Document ingestion — S3, text extraction, parsing | Planned |
-| 4 | Embedding generation — OpenAI embeddings, chunking strategies | Planned |
-| 5 | Vector search — pgvector similarity search, filtering | Planned |
-| 6 | LLM integration — provider abstraction, prompt engineering | Planned |
-| 7 | RAG orchestration — full pipeline, citations, hybrid search | Planned |
-| 8 | AWS deployment — Terraform, ECS Fargate, RDS | Planned |
+| 1 | Project bootstrap — Spring Boot, Maven, hexagonal skeleton, ArchUnit | ✅ Complete |
+| 2 | PostgreSQL + pgvector — Flyway migrations, JPA entities, HNSW index | ✅ Complete |
+| 3 | Document ingestion — S3 upload, text extraction (PDF/TXT/MD), async pipeline | ✅ Complete |
+| 4 | Chunking + embeddings — Ollama nomic-embed-text (768 dims), OpenAI fallback | ✅ Complete |
+| 5 | Query API — embed question → pgvector search → LLM answer + source citations | ✅ Complete |
+| 6 | Multi-provider LLM — Anthropic, Gemini adapters + advanced prompt engineering | Planned |
+| 7 | Conversation history — chat sessions, multi-turn context | Planned |
+| 8 | AWS deployment — Terraform, ECS Fargate, RDS, Secrets Manager | Planned |
 | 9 | Observability — Micrometer, Prometheus, Grafana dashboards | Planned |
-| 10 | Production hardening — security, rate limiting, resilience | Planned |
+| 10 | Production hardening — JWT auth, rate limiting, circuit breakers, resilience | Planned |
 
 ---
 
@@ -115,8 +119,7 @@ knowledge-assistant/
 | GET | `/documents` | List all documents |
 | GET | `/documents/{id}` | Get document details and status |
 | DELETE | `/documents/{id}` | Delete document and its chunks |
-| POST | `/chat` | Ask a question, get a cited answer |
-| POST | `/embeddings/rebuild` | Rebuild embeddings for a document |
+| POST | `/queries` | Ask a question, get a cited answer |
 | GET | `/actuator/health` | Health check |
 | GET | `/actuator/prometheus` | Prometheus metrics |
 

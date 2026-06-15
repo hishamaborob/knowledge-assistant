@@ -5,9 +5,12 @@
 
 ## Context
 
-We want to support OpenAI, Anthropic Claude, and Google Gemini interchangeably.
+We want to support Ollama (local), OpenAI, Anthropic Claude, and Google Gemini interchangeably.
 Spring AI provides `ChatModel` and `EmbeddingModel` abstractions, but they are framework types.
 Importing Spring AI into the domain layer would violate hexagonal boundaries.
+
+Ollama is the default local provider — no API key required, runs offline, and nomic-embed-text
+produces 768-dim vectors that match OpenAI text-embedding-3-small when configured to 768 dims.
 
 ## Decision
 
@@ -15,12 +18,16 @@ Define two domain ports:
 - `LlmPort` — chat completion
 - `EmbeddingPort` — vector generation
 
-Each LLM provider adapter wraps Spring AI's `ChatModel`/`EmbeddingModel` and implements these ports.
-Provider selection via `@ConditionalOnProperty(name = "app.llm.provider", havingValue = "openai")`.
+Each provider adapter wraps Spring AI's `ChatModel`/`EmbeddingModel` and implements these ports.
+Provider selection via `@ConditionalOnProperty(name = "app.llm.provider", havingValue = "ollama")`.
+LLM and embedding providers are switched independently:
+- `app.llm.provider=ollama|openai|anthropic|gemini`
+- `app.embedding.provider=ollama|openai`
 
-**Embedding note:** Only one provider is active for embeddings at a time. The embedding model
-used for ingestion **must** be the same model used for query embedding — mixing models produces
-incomparable vectors. This is enforced by storing the model name in `document_chunks.metadata`.
+**Embedding note:** Only one embedding provider is active at a time. The model used for ingestion
+**must** be the same model used for query embedding — mixing models produces incomparable vectors.
+Both Ollama nomic-embed-text and OpenAI text-embedding-3-small are configured to 768 dims, making
+them schema-compatible (same column size) even if vectors are not interchangeable across models.
 
 ## Consequences
 

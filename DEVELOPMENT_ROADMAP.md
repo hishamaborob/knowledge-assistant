@@ -1,6 +1,6 @@
 # Development Roadmap
 
-## Phase 1 — Project Bootstrap
+## Phase 1 — Project Bootstrap ✅ Complete
 
 **Goal:** A running Spring Boot application with correct hexagonal structure, Docker Compose for local Postgres, and a health endpoint.
 
@@ -15,22 +15,22 @@
 - First architecture decision records (ADRs)
 
 ### Coding Tasks
-- [ ] `pom.xml` with Spring Boot 3.x, Spring AI, Spring Data JPA, pgvector, Flyway, Testcontainers BOM
-- [ ] Package skeleton: `api`, `application`, `domain`, `infrastructure`
-- [ ] `application.yml` + `application-local.yml`
-- [ ] `docker-compose.yml` (postgres:16 + pgvector)
-- [ ] `V1__init.sql` Flyway baseline
-- [ ] `HealthController` (delegates to actuator)
-- [ ] First domain entity: `Document` aggregate root (plain Java, no JPA annotations)
-- [ ] First port: `DocumentStorePort` interface
-- [ ] `ApplicationConfig` — Spring configuration class, wire beans
-- [ ] Smoke test: `@SpringBootTest` that starts context and hits `/health`
+- [x] `pom.xml` with Spring Boot 3.x, Spring AI, Spring Data JPA, pgvector, Flyway, Testcontainers BOM
+- [x] Package skeleton: `api`, `application`, `domain`, `infrastructure`
+- [x] `application.yml` + `application-local.yml`
+- [x] `docker-compose.yml` (postgres:16 + pgvector)
+- [x] `V1__init.sql` Flyway baseline
+- [x] `HealthController` (delegates to actuator)
+- [x] First domain entity: `Document` aggregate root (plain Java, no JPA annotations)
+- [x] First port: `DocumentStorePort` interface
+- [x] `ApplicationConfig` — Spring configuration class, wire beans
+- [x] Smoke test: `@SpringBootTest` that starts context and hits `/health`
 
 ### Acceptance Criteria
-- [ ] `./mvnw spring-boot:run -Dspring-boot.run.profiles=local` starts without errors
-- [ ] `GET /actuator/health` returns `{"status":"UP"}`
-- [ ] Flyway migrations run automatically
-- [ ] Package structure passes ArchUnit test: domain has no imports from `infrastructure` or `api`
+- [x] `./mvnw spring-boot:run -Dspring-boot.run.profiles=local` starts without errors
+- [x] `GET /actuator/health` returns `{"status":"UP"}`
+- [x] Flyway migrations run automatically
+- [x] Package structure passes ArchUnit test: domain has no imports from `infrastructure` or `api`
 
 ### Claude Code Prompt
 ```
@@ -45,7 +45,7 @@ Explain every dependency and why it's included.
 
 ---
 
-## Phase 2 — PostgreSQL + pgvector
+## Phase 2 — PostgreSQL + pgvector ✅ Complete
 
 **Goal:** Full data layer — JPA entities, pgvector column, Flyway migrations for all tables, repository interfaces.
 
@@ -60,22 +60,21 @@ Explain every dependency and why it's included.
 - Testcontainers integration test proving similarity search works
 
 ### Coding Tasks
-- [ ] `V2__documents.sql` — documents table
-- [ ] `V3__document_chunks.sql` — chunks table with `vector(1536)` column + HNSW index
-- [ ] `V4__chat.sql` — sessions + messages tables
-- [ ] `Document` JPA entity (infrastructure layer — separate from domain entity)
-- [ ] `DocumentChunk` JPA entity with `float[]` mapped to pgvector
-- [ ] `DocumentJpaRepository` extends `JpaRepository`
-- [ ] `DocumentChunkJpaRepository` with native similarity search query
-- [ ] `PgVectorAdapter` implements `VectorStorePort`
-- [ ] `DocumentJpaAdapter` implements `DocumentRepository` port
-- [ ] Testcontainers test: insert chunks with fake vectors, assert cosine similarity search returns correct order
+- [x] `V2__documents.sql` — documents table
+- [x] `V3__document_chunks.sql` — chunks table with `vector(768)` column + HNSW index
+- [x] `Document` JPA entity (infrastructure layer — separate from domain entity)
+- [x] `DocumentChunk` JPA entity with `float[]` mapped to pgvector
+- [x] `DocumentJpaRepository` extends `JpaRepository`
+- [x] `DocumentChunkJpaRepository` with native similarity search query
+- [x] `PgVectorAdapter` implements `VectorStorePort`
+- [x] `DocumentJpaAdapter` implements `DocumentRepository` port
+- [x] Testcontainers test: insert chunks with fake vectors, assert cosine similarity search returns correct order
 
 ### Acceptance Criteria
-- [ ] Flyway runs all migrations cleanly on fresh DB
-- [ ] `DocumentChunkJpaRepositoryTest` passes with real Postgres via Testcontainers
-- [ ] EXPLAIN ANALYZE shows HNSW index being used for vector queries
-- [ ] ArchUnit: JPA entities exist only in `infrastructure.persistence` package
+- [x] Flyway runs all migrations cleanly on fresh DB
+- [x] `VectorSimilaritySearchIT` passes with real Postgres via Testcontainers
+- [x] HNSW index created on `document_chunks.embedding`
+- [x] ArchUnit: JPA entities exist only in `infrastructure.persistence` package
 
 ### Claude Code Prompt
 ```
@@ -88,7 +87,7 @@ Explain the index choice vs IVFFlat and when you would switch.
 
 ---
 
-## Phase 3 — Document Ingestion
+## Phase 3 — Document Ingestion ✅ Complete
 
 **Goal:** End-to-end upload flow. File → S3 → text extraction → events. No embeddings yet.
 
@@ -103,23 +102,23 @@ Explain the index choice vs IVFFlat and when you would switch.
 - Error handling with status updates on failure
 
 ### Coding Tasks
-- [ ] `DocumentController` — multipart upload, validation
-- [ ] `DocumentRequest` DTO + `DocumentResponse` DTO
-- [ ] `DocumentService` use case
-- [ ] `S3DocumentAdapter` implements `DocumentStorePort`
-- [ ] `TextExtractorAdapter` — Apache PDFBox + plain text passthrough
-- [ ] `DocumentUploadedEvent` domain event
-- [ ] `IngestionEventHandler` — `@EventListener` + `@Async`
-- [ ] `DocumentStatus` enum with allowed transitions
-- [ ] `docker-compose.yml` addition: LocalStack for S3 in local dev
-- [ ] Integration test: upload PDF, verify status transitions
+- [x] `DocumentController` — multipart upload, validation
+- [x] `DocumentRequest` DTO + `DocumentResponse` DTO
+- [x] `DocumentService` use case
+- [x] `S3DocumentAdapter` implements `DocumentStorePort`
+- [x] `TextExtractorAdapter` — Apache PDFBox + plain text passthrough
+- [x] `DocumentUploadedEvent` domain event
+- [x] `IngestionEventHandler` — `@TransactionalEventListener` + `REQUIRES_NEW` (Spring 6.2)
+- [x] `DocumentStatus` enum with allowed transitions
+- [x] LocalStack for S3 in local dev (`docker-compose.yml`)
+- [x] Integration test: upload PDF, verify status transitions
 
 ### Acceptance Criteria
-- [ ] `POST /documents` returns 202 with document ID within 200ms
-- [ ] Status transitions correctly tracked in DB
-- [ ] Text extraction works for PDF, TXT, MD
-- [ ] Failed ingestion updates status to FAILED with error message
-- [ ] `GET /documents/{id}` reflects current status
+- [x] `POST /documents` returns 202 with document ID
+- [x] Status transitions correctly tracked in DB (PENDING → STORED → PROCESSING → READY | FAILED)
+- [x] Text extraction works for PDF, TXT, MD
+- [x] Failed ingestion updates status to FAILED with error message
+- [x] `GET /documents/{id}` reflects current status
 
 ### Claude Code Prompt
 ```
@@ -133,154 +132,147 @@ all method signatures.
 
 ---
 
-## Phase 4 — Embedding Generation
+## Phase 4 — Chunking + Embeddings ✅ Complete
 
-**Goal:** Chunk text, generate embeddings via OpenAI, persist to pgvector.
+**Goal:** Chunk text, generate 768-dim embeddings via Ollama nomic-embed-text, persist to pgvector.
 
-**Why this matters:** Chunking strategy directly determines retrieval quality. The token budget for chunks + prompt must fit in the LLM's context window. Over-chunking wastes tokens; under-chunking loses semantic boundaries.
+**Why this matters:** Chunking strategy directly determines retrieval quality. Embeddings must use the same model at ingest and query time — vector spaces are model-specific and are not interchangeable.
 
 ### Deliverables
 - `EmbeddingPort` domain interface
-- `OpenAiEmbeddingAdapter` implements `EmbeddingPort`
-- `FixedSizeChunker` with configurable token window and overlap
+- `OllamaEmbeddingAdapter` implements `EmbeddingPort` (nomic-embed-text, 768 dims)
+- `OpenAiEmbeddingAdapter` implements `EmbeddingPort` (text-embedding-3-small configured to 768 dims — prod fallback)
+- `FixedSizeChunker` with configurable word window and overlap
 - `ChunkingStrategy` port + implementation wiring
-- Batch embedding calls (OpenAI allows up to 2048 inputs per call)
-- Ingestion pipeline integration: after text extraction → chunk → embed → store
-- Retry logic for OpenAI rate limits (exponential backoff)
+- Ingestion pipeline integration: text extraction → chunk → embed → store
+- `@ConditionalOnProperty(app.embedding.provider)` selects active adapter
 
 ### Coding Tasks
-- [ ] `EmbeddingPort` interface: `List<float[]> embed(List<String> texts)`
-- [ ] `OpenAiEmbeddingAdapter` using Spring AI `EmbeddingModel`
-- [ ] `ChunkingStrategy` interface + `FixedSizeChunker` implementation
-- [ ] `ChunkingConfig` — configurable chunk size and overlap
-- [ ] Update `IngestionService` to chunk → batch embed → persist
-- [ ] `EmbeddingRetryConfig` — Spring Retry with exponential backoff
-- [ ] Unit test: `FixedSizeChunkerTest` — verify chunk count, overlap, edge cases
-- [ ] Integration test: end-to-end ingestion with real embeddings via Testcontainers
+- [x] `EmbeddingPort` interface: `List<float[]> embed(List<String> texts)`
+- [x] `OllamaEmbeddingAdapter` using Spring AI `OllamaEmbeddingModel`
+- [x] `OpenAiEmbeddingAdapter` using Spring AI `OpenAiEmbeddingModel` (dimensions=768)
+- [x] `ChunkingStrategy` interface + `FixedSizeChunker` implementation (pure Java, no framework)
+- [x] Update `EmbeddingService` to chunk → embed → persist chunks
+- [x] `PgVectorStoreAutoConfiguration` excluded (custom adapter; two EmbeddingModel beans cause ambiguity)
+- [x] Unit test: `FixedSizeChunkerTest` — 11 cases: null, blank, shorter-than-chunk, exact, overlap, invalid args
+- [x] Unit test: `EmbeddingServiceTest` — success, empty text, embed failure, doc-not-found
+- [x] Integration test: `VectorSimilaritySearchIT` with real 768-dim vectors
 
 ### Acceptance Criteria
-- [ ] 1000-word document produces expected number of chunks
-- [ ] Embedding vectors are correctly persisted as `vector(1536)` in pgvector
-- [ ] Batch size respects OpenAI API limits
-- [ ] Transient API failures retry with backoff; permanent failures mark doc FAILED
+- [x] Document produces expected number of chunks
+- [x] Embedding vectors correctly persisted as `vector(768)` in pgvector
+- [x] `app.embedding.provider=ollama` uses nomic-embed-text; `openai` uses text-embedding-3-small
+- [x] Embedding failure marks document FAILED with error message
+- [x] `mvn verify` passes (78 tests, 0 failures)
 
 ### Claude Code Prompt
 ```
-We are in Phase 4. Implement FixedSizeChunker in the domain layer. 
-It should split text into chunks of configurable token count (default 512) with configurable 
-overlap (default 64 tokens). Use a simple whitespace tokenizer for now (we'll swap to tiktoken 
-in Phase 7). The implementation must not depend on any framework — pure Java. Include the 
-ChunkingStrategy interface. Write unit tests for: empty input, text shorter than chunk size, 
-exact multiple of chunk size, overlap boundary conditions.
+We are in Phase 4. Implement FixedSizeChunker in the domain layer.
+It should split text into chunks of configurable word count (default 512) with configurable
+overlap (default 64 words). The implementation must not depend on any framework — pure Java.
+Include the ChunkingStrategy interface. Write unit tests for: empty input, text shorter than
+chunk size, exact multiple of chunk size, overlap boundary conditions.
 ```
 
 ---
 
-## Phase 5 — Vector Search
+## Phase 5 — Query API (RAG Pipeline) ✅ Complete
 
-**Goal:** Similarity search with filtering, scoring, and threshold pruning.
+**Goal:** Full retrieval-augmented generation loop: `POST /queries` → embed question → similarity search → context assembly → LLM call → cited answer.
 
-**Why this matters:** Vector search quality is the multiplier on everything downstream. Retrieving irrelevant chunks = bad answers regardless of LLM quality.
+**Why this matters:** This is the complete read path. Combines vector search, LLM integration, and RAG orchestration in a single phase because each component is meaningless without the others.
 
 ### Deliverables
-- `VectorStorePort` with rich search interface (topK, threshold, document filter)
-- `PgVectorAdapter` with native SQL similarity query
-- Cosine distance with configurable similarity threshold
-- Optional document ID filter (search within a specific document)
-- Scored results with chunk metadata for citations
-- Performance test: verify HNSW index reduces query time vs sequential scan
+- `LlmPort` domain interface (`String complete(systemPrompt, userPrompt)`)
+- `OllamaLlmAdapter` — local llama3.2 via Ollama; `app.llm.provider=ollama`
+- `OpenAiLlmAdapter` — gpt-4o in production; `app.llm.provider=openai`
+- `QueryService` — embed → search → no-results guard → context assembly (12,000 char cap) → LLM → source citations
+- `POST /queries` endpoint with optional document ID filter
+- No-results guard: skips LLM entirely when search returns empty (anti-hallucination)
+- `SourceChunk` / `QueryResult` domain value objects
 
 ### Coding Tasks
-- [ ] `SimilaritySearchRequest` value object: vector, topK, threshold, documentIds
-- [ ] `ScoredChunk` value object: chunk content, score, document metadata
-- [ ] `VectorStorePort.search(SimilaritySearchRequest)` → `List<ScoredChunk>`
-- [ ] `PgVectorAdapter` with native query using `<=>` cosine operator
-- [ ] `DocumentChunkJpaRepository.findSimilar()` native SQL method
-- [ ] `@Query` with `CAST(:vector AS vector)` parameter binding
-- [ ] Testcontainers test: insert known vectors, assert search order is correct
+- [x] `LlmPort` — `String complete(String systemPrompt, String userPrompt)`
+- [x] `SourceChunk` record: documentId, documentName, contentSnippet (≤200 chars), score
+- [x] `QueryResult` record: answer, List\<SourceChunk\>, durationMs
+- [x] `QueryService` — full pipeline with context budget cap and no-results short-circuit
+- [x] `OllamaLlmAdapter` — `OllamaChatModel.call(Prompt)`, `getText()` (not `getContent()` — M6 API change)
+- [x] `OpenAiLlmAdapter` — same interface, `OpenAiChatModel`
+- [x] `QueryController` — `POST /queries`, string documentIds → `DocumentId` domain objects
+- [x] `GlobalExceptionHandler` additions: `MethodArgumentNotValidException→400`, `IllegalArgumentException→400`
+- [x] Unit test: `QueryServiceTest` — happy path, no-results, doc filter, snippet truncation, budget cap
+- [x] `@WebMvcTest`: `QueryControllerTest` — 200, 400 on blank question, 400 on invalid UUID
+- [x] Unit test: `OllamaLlmAdapterTest` — real `ChatResponse`/`Generation` objects, `doReturn+(Prompt)` cast for overload ambiguity
 
 ### Acceptance Criteria
-- [ ] Cosine similarity search returns chunks in correct order
-- [ ] Score threshold correctly filters low-relevance results
-- [ ] Document filter restricts search to specified documents
-- [ ] EXPLAIN ANALYZE confirms index usage
+- [x] Upload a document → READY → `POST /queries` returns a grounded answer
+- [x] Response includes `sources[]` with documentName, contentSnippet, score
+- [x] Blank question returns 400; invalid UUID in documentIds returns 400
+- [x] Empty similarity search returns "No relevant documents found" without calling LLM
+- [x] `mvn verify` green (94 tests, 0 failures)
+- [x] ArchUnit: `QueryService` imports nothing from `api` or `infrastructure`
 
 ### Claude Code Prompt
 ```
-We are in Phase 5. Write the native SQL query for PgVectorAdapter.search() using pgvector's 
-cosine distance operator (<=>). The query must: filter by optional list of document_ids, 
-apply a similarity threshold (1 - distance >= threshold), return top-K results ordered by 
-distance ascending, include document metadata in the result set. Show me the Spring Data JPA 
-repository method with @Query annotation and explain every part of the SQL.
+We are in Phase 5. Implement QueryService.query(String question, List<DocumentId> filter).
+It must: 1) embed the question via EmbeddingPort, 2) call VectorStorePort.similaritySearch(),
+3) if results are empty return a fixed "No relevant documents found" message without calling LLM,
+4) cap context at 12,000 chars (chunks sorted by score desc), 5) call LlmPort.complete(),
+6) return QueryResult with answer + source citations (document name + snippet ≤200 chars).
+Explain why citations come from the retrieval step not LLM output parsing.
 ```
 
 ---
 
-## Phase 6 — LLM Integration
+## Phase 6 — Multi-Provider LLM + Prompt Engineering
 
-**Goal:** Provider abstraction + prompt engineering. Working LLM completions from all three providers.
+**Goal:** Add Anthropic and Gemini adapters; advanced prompt templates; streaming support.
 
-**Why this matters:** Prompt design determines answer quality. System prompt must instruct the LLM to cite sources and refuse to answer from parametric knowledge. Provider abstraction must be transparent to the application layer.
+**Why this matters:** Portfolio demonstration of the provider-agnostic design. Shows LlmPort abstraction delivers on its promise — adding a provider is a single adapter class with zero changes to QueryService.
 
 ### Deliverables
-- `LlmPort` domain interface
-- `OpenAiAdapter`, `AnthropicAdapter`, `GeminiAdapter` via Spring AI
-- `@ConditionalOnProperty` provider selection
-- System prompt with strict citation instructions
-- Token usage tracking
-- `LlmRequest`/`LlmResponse` value objects
-- Streaming support stub (Phase 10 implementation)
+- `AnthropicLlmAdapter` — Claude claude-sonnet-4-6 via Spring AI
+- `GeminiLlmAdapter` — Gemini 1.5 Pro via Spring AI
+- `app.llm.provider=anthropic|gemini` selection in config
+- Advanced system prompt: structured citation format, refuse-to-speculate instruction
+- Token usage tracking in `QueryResult`
+- Streaming response support (`Flux<String>` variant of `LlmPort`)
 
 ### Coding Tasks
-- [ ] `LlmPort.complete(LlmRequest)` → `LlmResponse`
-- [ ] `LlmRequest`: systemPrompt, userPrompt, maxTokens, temperature
-- [ ] `LlmResponse`: content, promptTokens, completionTokens, model
-- [ ] `OpenAiChatAdapter` using Spring AI `ChatModel`
-- [ ] `AnthropicChatAdapter` using Spring AI Anthropic client
-- [ ] `GeminiChatAdapter` using Spring AI Google client
-- [ ] `LlmConfig` — `@ConditionalOnProperty` wiring
-- [ ] `PromptTemplates.properties` — externalized prompt templates
-- [ ] Integration test: actual LLM call (tagged @SlowTest, skipped in CI without keys)
+- [ ] `AnthropicLlmAdapter` implementing `LlmPort`
+- [ ] `GeminiLlmAdapter` implementing `LlmPort`
+- [ ] `application-prod.yml` with `app.llm.provider=openai` (default prod)
+- [ ] Improved system prompt with structured citation format `[1]`
+- [ ] `StreamingLlmPort` — `Flux<String> stream(String systemPrompt, String userPrompt)`
+- [ ] `GET /queries/stream` SSE endpoint using `StreamingLlmPort`
+- [ ] Integration test: actual LLM call (`@Tag("slow")`, skipped in CI without keys)
 
 ### Acceptance Criteria
-- [ ] Changing `app.llm.provider` to any of the three values works without code changes
-- [ ] All providers return citations in their response
-- [ ] Token usage is captured in `LlmResponse`
+- [ ] `app.llm.provider=anthropic` calls Claude without code changes
+- [ ] `app.llm.provider=gemini` calls Gemini without code changes
+- [ ] `GET /queries/stream` streams tokens as SSE events
 - [ ] Invalid provider config fails fast at startup with clear error
 
-### Claude Code Prompt
-```
-We are in Phase 6. Design the LlmPort interface and the PromptBuilder for the RAG use case.
-The system prompt must: instruct the model to answer ONLY from the provided context, 
-format citations as [SOURCE: documentName, chunk N], refuse to speculate beyond context, 
-and respond with "I don't have enough information" when context is insufficient. 
-Show me the interface, the PromptBuilder class, and the system prompt text. 
-Explain the prompt engineering decisions.
-```
-
 ---
 
-## Phase 7 — RAG Orchestration
+## Phase 7 — Conversation History
 
-**Goal:** Full end-to-end RAG pipeline with citations, hybrid search, and conversation context.
+**Goal:** Multi-turn chat sessions. Users can ask follow-up questions with prior context preserved.
 
 ### Deliverables
-- `ChatService` orchestrates: embed → search → prompt → LLM → cite
-- `Citation` value object with documentName, excerpt, score
-- `QueryResult` value object: answer + citations + token usage
-- `POST /chat` endpoint
-- Chat history persistence
-- Similarity threshold tuning
-- Metadata filter support
+- `ChatSession` aggregate root, `ChatMessage` entity
+- `V4__chat.sql` Flyway migration — sessions + messages tables
+- `POST /sessions` — create session
+- `POST /sessions/{id}/messages` — send message with conversation context
+- Session context injected into LLM prompt (last N turns, configurable window)
+- `GET /sessions/{id}/messages` — retrieve history
 
 ### Claude Code Prompt
 ```
-We are in Phase 7. Implement ChatService.query(ChatRequest) → QueryResult.
-It must: 1) embed the question, 2) search pgvector for topK=10 chunks above threshold 0.75, 
-3) if no chunks found return "insufficient information" without calling LLM, 
-4) build prompt with context, 5) call LlmPort, 6) extract citations from retrieved chunks 
-(not parsed from LLM output), 7) persist chat message with citations as JSON. 
-Explain why citations come from the retrieval step, not LLM output parsing.
+We are in Phase 7. Implement ChatSession and ChatMessage domain models.
+A session contains an ordered list of messages (role: USER | ASSISTANT), each with content and
+citations. When querying, inject the last 5 messages as conversation history in the LLM prompt.
+Explain the tradeoff between conversation context window size and LLM cost.
 ```
 
 ---

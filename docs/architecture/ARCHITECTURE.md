@@ -67,7 +67,7 @@ C4Container
         Container(api, "REST API", "Spring Boot 3.x / Java 21", "Handles HTTP requests, auth, validation, rate limiting")
         Container(ingestion, "Ingestion Pipeline", "Spring Batch (optional) / async threads", "Parses, chunks, embeds documents")
         Container(rag, "RAG Orchestrator", "Spring AI", "Retrieves chunks, builds prompts, calls LLM, assembles citations")
-        ContainerDb(pg, "PostgreSQL + pgvector", "RDS PostgreSQL 16", "Stores document metadata, chunks, and 1536-dim vector embeddings")
+        ContainerDb(pg, "PostgreSQL + pgvector", "RDS PostgreSQL 16", "Stores document metadata, chunks, and 768-dim vector embeddings")
         Container(cache, "Redis Cache", "ElastiCache (optional)", "Caches frequent query embeddings and LLM responses")
     }
 
@@ -96,18 +96,16 @@ C4Component
 
     Container_Boundary(api_layer, "API Layer (Adapters IN)") {
         Component(doc_ctrl, "DocumentController", "REST Controller", "Document upload, list, delete endpoints")
-        Component(chat_ctrl, "ChatController", "REST Controller", "POST /chat endpoint")
-        Component(embed_ctrl, "EmbeddingController", "REST Controller", "POST /embeddings/rebuild")
+        Component(query_ctrl, "QueryController", "REST Controller", "POST /queries endpoint")
         Component(health_ctrl, "HealthController", "Actuator / REST", "GET /health")
-        Component(auth_filter, "JwtAuthFilter", "Servlet Filter", "Validates Bearer tokens")
-        Component(rate_limiter, "RateLimitFilter", "Servlet Filter", "Token-bucket rate limiting per API key")
+        Component(auth_filter, "JwtAuthFilter", "Servlet Filter", "Validates Bearer tokens — Phase 10")
+        Component(rate_limiter, "RateLimitFilter", "Servlet Filter", "Token-bucket rate limiting — Phase 10")
     }
 
     Container_Boundary(app_layer, "Application Layer (Use Cases)") {
         Component(doc_svc, "DocumentService", "Use Case", "Orchestrates upload → S3 store → ingestion trigger")
-        Component(ingest_svc, "IngestionService", "Use Case", "Chunk → embed → persist pipeline")
-        Component(chat_svc, "ChatService", "Use Case", "Embed query → retrieve → prompt → LLM → cite")
-        Component(embed_svc, "EmbeddingService", "Use Case", "Rebuild embeddings for existing docs")
+        Component(ingest_svc, "EmbeddingService", "Use Case", "Chunk → embed → persist pipeline")
+        Component(query_svc, "QueryService", "Use Case", "Embed query → similarity search → LLM → source citations")
     }
 
     Container_Boundary(domain_layer, "Domain Layer (Pure Java)") {
@@ -123,34 +121,38 @@ C4Component
     }
 
     Container_Boundary(infra_layer, "Infrastructure Layer (Adapters OUT)") {
-        Component(openai_adapter, "OpenAiAdapter", "Spring AI", "Implements LlmPort + EmbeddingPort via OpenAI")
-        Component(anthropic_adapter, "AnthropicAdapter", "Spring AI", "Implements LlmPort via Anthropic")
-        Component(gemini_adapter, "GeminiAdapter", "Spring AI", "Implements LlmPort via Gemini")
-        Component(pgvector_adapter, "PgVectorAdapter", "Spring AI / JPA", "Implements VectorStorePort via pgvector")
+        Component(ollama_llm, "OllamaLlmAdapter", "Spring AI", "Implements LlmPort via Ollama llama3.2 (local)")
+        Component(openai_llm, "OpenAiLlmAdapter", "Spring AI", "Implements LlmPort via OpenAI gpt-4o (prod)")
+        Component(anthropic_adapter, "AnthropicLlmAdapter", "Spring AI", "Implements LlmPort via Anthropic — Phase 6")
+        Component(gemini_adapter, "GeminiLlmAdapter", "Spring AI", "Implements LlmPort via Gemini — Phase 6")
+        Component(ollama_embed, "OllamaEmbeddingAdapter", "Spring AI", "Implements EmbeddingPort via nomic-embed-text (768 dims)")
+        Component(openai_embed, "OpenAiEmbeddingAdapter", "Spring AI", "Implements EmbeddingPort via text-embedding-3-small (768 dims)")
+        Component(pgvector_adapter, "PgVectorAdapter", "Spring Data JPA", "Implements VectorStorePort via pgvector cosine search")
         Component(s3_adapter, "S3DocumentAdapter", "AWS SDK v2", "Implements DocumentStorePort via S3")
         Component(jpa_repo, "DocumentJpaRepository", "Spring Data JPA", "CRUD for Document + DocumentChunk")
-        Component(text_extractor, "TextExtractorAdapter", "Apache PDFBox / Tika", "Extracts text from PDF, TXT, MD")
-        Component(fixed_chunk, "FixedSizeChunker", "Domain Impl", "Implements ChunkingStrategy — fixed token window")
-        Component(semantic_chunk, "SemanticChunker", "Domain Impl", "Implements ChunkingStrategy — embedding similarity boundaries")
+        Component(text_extractor, "TextExtractorAdapter", "Apache PDFBox", "Extracts text from PDF, TXT, MD")
+        Component(fixed_chunk, "FixedSizeChunker", "Domain Impl", "Implements ChunkingStrategy — fixed word window with overlap")
+        Component(semantic_chunk, "SemanticChunker", "Domain Impl", "Implements ChunkingStrategy — embedding similarity boundaries (Phase 10)")
     }
 
     Rel(doc_ctrl, doc_svc, "calls")
-    Rel(chat_ctrl, chat_svc, "calls")
-    Rel(embed_ctrl, embed_svc, "calls")
+    Rel(query_ctrl, query_svc, "calls")
     Rel(doc_svc, ingest_svc, "triggers async")
     Rel(doc_svc, doc_store_port, "store file")
     Rel(ingest_svc, chunk_strategy, "chunk text")
     Rel(ingest_svc, embedding_port, "generate embeddings")
     Rel(ingest_svc, vector_store_port, "persist chunks+vectors")
-    Rel(chat_svc, embedding_port, "embed query")
-    Rel(chat_svc, vector_store_port, "similarity search")
-    Rel(chat_svc, llm_port, "complete prompt")
+    Rel(query_svc, embedding_port, "embed question")
+    Rel(query_svc, vector_store_port, "similarity search")
+    Rel(query_svc, llm_port, "complete prompt")
     Rel(s3_adapter, doc_store_port, "implements")
     Rel(pgvector_adapter, vector_store_port, "implements")
-    Rel(openai_adapter, llm_port, "implements")
-    Rel(openai_adapter, embedding_port, "implements")
+    Rel(ollama_llm, llm_port, "implements")
+    Rel(openai_llm, llm_port, "implements")
     Rel(anthropic_adapter, llm_port, "implements")
     Rel(gemini_adapter, llm_port, "implements")
+    Rel(ollama_embed, embedding_port, "implements")
+    Rel(openai_embed, embedding_port, "implements")
 ```
 
 ---
@@ -204,37 +206,38 @@ sequenceDiagram
     IngestSvc->>DB: UPDATE document status=READY, chunkCount=N
 ```
 
-### Chat / RAG Query
+### RAG Query
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User
-    participant API as ChatController
-    participant ChatSvc as ChatService
+    participant API as QueryController
+    participant QuerySvc as QueryService
     participant EmbedPort as EmbeddingPort
     participant VecStore as PgVectorAdapter
     participant DB as PostgreSQL
-    participant PromptBuilder as PromptBuilder
     participant LLM as LlmPort (active provider)
 
-    User->>API: POST /chat {question, topK, documentIds?}
-    API->>API: Validate JWT, rate limit
-    API->>ChatSvc: query(ChatRequest)
-    ChatSvc->>EmbedPort: embed(question)
-    EmbedPort-->>ChatSvc: questionVector (1536-dim)
-    ChatSvc->>VecStore: similaritySearch(vector, topK, filters)
+    User->>API: POST /queries {question, documentIds?}
+    API->>QuerySvc: query(question, documentFilter)
+    QuerySvc->>EmbedPort: embed([question])
+    EmbedPort-->>QuerySvc: questionVector (768-dim)
+    QuerySvc->>VecStore: similaritySearch(vector, topK=10, threshold=0.75, filter)
     VecStore->>DB: SELECT ... ORDER BY embedding <=> $1 LIMIT $2
     DB-->>VecStore: List<ScoredChunk>
-    VecStore-->>ChatSvc: List<ScoredChunk>
-    ChatSvc->>ChatSvc: Filter chunks below similarity threshold (e.g. 0.75)
-    ChatSvc->>PromptBuilder: buildPrompt(question, chunks)
-    PromptBuilder-->>ChatSvc: SystemPrompt + UserPrompt
-    ChatSvc->>LLM: complete(prompt)
-    LLM-->>ChatSvc: LlmResponse(text, tokens)
-    ChatSvc->>ChatSvc: buildCitations(usedChunks)
-    ChatSvc-->>API: QueryResult(answer, citations, tokenUsage)
-    API-->>User: 200 OK {answer, citations, metadata}
+    VecStore-->>QuerySvc: List<ScoredChunk>
+    alt No results above threshold
+        QuerySvc-->>API: QueryResult("No relevant documents found", [], durationMs)
+    else Results found
+        QuerySvc->>QuerySvc: loadDocumentNames(unique documentIds)
+        QuerySvc->>QuerySvc: buildContext(chunks, budget=12000 chars)
+        QuerySvc->>LLM: complete(SYSTEM_PROMPT, "Context:\n...\n\nQuestion: ...")
+        LLM-->>QuerySvc: answer String
+        QuerySvc->>QuerySvc: buildSources(chunks, docNames, snippet≤200)
+        QuerySvc-->>API: QueryResult(answer, sources, durationMs)
+    end
+    API-->>User: 200 OK {answer, sources[], durationMs}
 ```
 
 ### AWS Deployment
@@ -282,13 +285,13 @@ sequenceDiagram
 
 ### Embedding Model Selection
 
-| Model | Dimensions | Cost | Quality | Notes |
+| Model | Provider | Dimensions | Cost | Notes |
 |---|---|---|---|---|
-| `text-embedding-3-small` | 1536 | $0.02/1M tokens | Good | Default choice |
-| `text-embedding-3-large` | 3072 | $0.13/1M tokens | Best | Use for production |
-| `text-embedding-ada-002` | 1536 | $0.10/1M tokens | Good | Legacy, avoid for new |
+| `nomic-embed-text` | Ollama (local) | 768 | Free | Default for local dev; no API key needed |
+| `text-embedding-3-small` | OpenAI | 768 | $0.02/1M tokens | Configured to 768 dims to match nomic-embed-text |
+| `text-embedding-3-large` | OpenAI | 3072 | $0.13/1M tokens | Higher quality but incompatible vector size |
 
-**Rule:** embedding model must be **immutable** after first ingestion. Changing it requires a full re-embed (the `/embeddings/rebuild` endpoint exists for this).
+**Rule:** embedding model must be **immutable** after first ingestion. Changing model or dimensions requires a full re-embed of all documents — vector spaces are model-specific and not interchangeable.
 
 ### Vector Index Strategy
 
@@ -322,13 +325,18 @@ The `LlmPort` domain interface decouples the application from any specific provi
 
 ```
 LlmPort
-  └── OpenAiAdapter     (Spring AI OpenAI chat client)
-  └── AnthropicAdapter  (Spring AI Anthropic chat client)
-  └── GeminiAdapter     (Spring AI Google Vertex/Gemini client)
+  └── OllamaLlmAdapter     (Spring AI Ollama — llama3.2 local, app.llm.provider=ollama)
+  └── OpenAiLlmAdapter     (Spring AI OpenAI — gpt-4o prod, app.llm.provider=openai)
+  └── AnthropicLlmAdapter  (Spring AI Anthropic — claude-sonnet-4-6, Phase 6)
+  └── GeminiLlmAdapter     (Spring AI Google Vertex/Gemini, Phase 6)
 ```
 
-Provider selection is driven by `app.llm.provider=openai|anthropic|gemini` in application config.
+Provider selection is driven by `app.llm.provider=ollama|openai|anthropic|gemini` in application config.
 Spring `@ConditionalOnProperty` activates the correct `@Bean`.
+
+`EmbeddingPort` follows the same pattern independently — LLM and embedding providers are configured
+and switched separately. For example, `app.embedding.provider=ollama` + `app.llm.provider=openai`
+is a valid combination for production (free local embeddings + high-quality cloud LLM).
 
 **When to use AWS Bedrock instead:**
 - You are already in AWS and want to avoid external egress

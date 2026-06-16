@@ -24,11 +24,16 @@ public class QueryService {
     private static final int SNIPPET_LENGTH = 200;
 
     private static final String SYSTEM_PROMPT = """
-            You are a knowledge assistant. Answer the user's question using ONLY the context provided below.
-            If the context does not contain enough information to answer the question, say so explicitly.
-            Do not make up or infer information beyond what is stated in the context.
-            When referencing information, cite the source number in brackets, e.g. [1].
-            Be concise and accurate.
+            You are a knowledge assistant. Answer questions using ONLY the information provided in the numbered context below.
+
+            Citation rules:
+            - Every factual claim must cite its source using [N] where N is the context entry number
+            - If multiple sources support the same claim, cite all of them: [1][3]
+
+            If the context does not contain sufficient information to answer the question, respond with exactly:
+            "I don't have enough information in the provided documents to answer this question."
+
+            Do not speculate, infer, or draw on knowledge outside the provided context.
             """;
 
     private final EmbeddingPort embeddingPort;

@@ -63,7 +63,7 @@ cd backend
 | 3 | Document ingestion — S3 upload, text extraction (PDF/TXT/MD), async pipeline | ✅ Complete |
 | 4 | Chunking + embeddings — Ollama nomic-embed-text (768 dims), OpenAI fallback | ✅ Complete |
 | 5 | Query API — embed question → pgvector search → LLM answer + source citations | ✅ Complete |
-| 6 | Multi-provider LLM — Anthropic, Gemini adapters + advanced prompt engineering | Planned |
+| 6 | Multi-provider LLM — Anthropic adapter + improved prompt engineering | ✅ Complete |
 | 7 | Conversation history — chat sessions, multi-turn context | Planned |
 | 8 | AWS deployment — Terraform, ECS Fargate, RDS, Secrets Manager | Planned |
 | 9 | Observability — Micrometer, Prometheus, Grafana dashboards | Planned |

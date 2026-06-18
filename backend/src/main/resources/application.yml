@@ -140,6 +140,8 @@ app:
   similarity:
     threshold: 0.75  # Minimum cosine similarity score to include a chunk. Tune with eval.
     top-k: 10
+  chat:
+    history-window: 10  # Max prior messages (5 exchanges) injected into the LLM prompt
 
 # SpringDoc: disable in production via app.springdoc.enabled=false
 springdoc:

@@ -249,25 +249,46 @@ Explain why citations come from the retrieval step not LLM output parsing.
 
 ---
 
-## Phase 7 — Conversation History
+## Phase 7 — Conversation History ✅ Complete
 
 **Goal:** Multi-turn chat sessions. Users can ask follow-up questions with prior context preserved.
 
+**Why this matters:** `V4__chat.sql` shipped back in Phase 2 but had zero application code using it until now — this phase builds the domain/application/api/infrastructure layers on top of that pre-existing schema.
+
 ### Deliverables
-- `ChatSession` aggregate root, `ChatMessage` entity
-- `V4__chat.sql` Flyway migration — sessions + messages tables
+- `ChatSession` entity, `ChatMessage` entity, `ChatRole` enum, `ChatTurn` value object
+- `LlmPort` gains a history-aware 3-arg overload via a default method (2-arg stays, zero breaking change)
+- `QueryService` gains a matching 3-arg `query()` overload; `ChatService` reuses it rather than duplicating RAG logic
 - `POST /sessions` — create session
 - `POST /sessions/{id}/messages` — send message with conversation context
-- Session context injected into LLM prompt (last N turns, configurable window)
-- `GET /sessions/{id}/messages` — retrieve history
+- Session context injected into LLM prompt as structured messages (last N turns, configurable via `app.chat.history-window`, default 10)
+- `GET /sessions/{id}/messages` — retrieve history with citations
+- Citations persisted as JSONB via a plain `CitationRecord` (avoids custom Jackson handling for the `DocumentId` value object)
 
-### Claude Code Prompt
-```
-We are in Phase 7. Implement ChatSession and ChatMessage domain models.
-A session contains an ordered list of messages (role: USER | ASSISTANT), each with content and
-citations. When querying, inject the last 5 messages as conversation history in the LLM prompt.
-Explain the tradeoff between conversation context window size and LLM cost.
-```
+### Coding Tasks
+- [x] `ChatSessionId`, `ChatMessageId`, `ChatRole`, `ChatTurn`, `ChatSession`, `ChatMessage` domain types
+- [x] `ChatSessionRepository`, `ChatMessageRepository` ports + JPA adapters (lowercase role mapping to match the checksummed V4 migration)
+- [x] `LlmPort` 3-arg `complete()`; Ollama/OpenAi/Anthropic adapters implement it
+- [x] `QueryService` 3-arg `query()` overload; 2-arg delegates with `List.of()`
+- [x] `ChatService` — session lifecycle, history windowing, message persistence
+- [x] `ChatController` — 3 endpoints; `GlobalExceptionHandler` — `ChatSessionNotFoundException → 404`
+- [x] `ChatSessionTest`, `ChatMessageTest`, `ChatServiceTest`, `ChatControllerTest`, `ChatPersistenceIT` (JSONB round-trip)
+- [x] `QueryServiceTest` updated — unifying the two `query()` overloads meant existing 2-arg `LlmPort` mocks silently stopped matching
+
+### Acceptance Criteria
+- [x] First message in a session uses empty history; later messages include prior turns
+- [x] History window caps at `app.chat.history-window`, oldest-first within the window
+- [x] Unknown session ID returns 404 on send and history endpoints
+- [x] `/queries` stateless endpoint unaffected
+- [x] `mvn verify` green: 109 unit tests + 20 integration tests
+
+### Known Limitations (deferred to Phase 10)
+
+Two retrieval issues surfaced during manual testing that are not code bugs but informed design gaps requiring targeted work:
+
+1. **Similarity threshold miscalibrated for `nomic-embed-text`** — The default threshold of 0.75 is too strict for Ollama's `nomic-embed-text` embedding model, which produces cosine similarity scores in a lower range than OpenAI's embeddings. Even queries with strong lexical overlap (e.g. "What is Paris known for?" vs "Paris is known for its art, culture, and cuisine.") can fall below the cutoff and return no results. Additionally, short test documents produce single-chunk embeddings that represent a blend of multiple facts, diluting scores further. The threshold should be tuned per embedding provider, with a lower default for nomic-embed-text (~0.5).
+
+2. **Retrieval is not history-aware for multi-turn sessions** — `QueryService` embeds the raw follow-up question alone. History is only injected at the LLM *generation* step, not the *retrieval* step. Follow-up questions using pronouns or implicit references ("When was its most famous tower completed?") produce embeddings with weak semantic signal against the document chunks and regularly return empty results before the LLM is ever called. A "condense-question" step is needed: before embedding, either (a) prepend recent turns to the query text, or (b) use an LLM call to rewrite the follow-up into a fully self-contained question, then embed the rewritten form.
 
 ---
 
@@ -330,6 +351,8 @@ Show me the instrumentation pattern and explain gauge vs counter vs timer choice
 - Reranking integration (Cohere)
 - Connection pool tuning
 - Production runbook
+- **Similarity threshold per embedding provider** — make `app.similarity.threshold` provider-aware; lower default for `nomic-embed-text` (~0.5 vs 0.75 for OpenAI), with guidance documented in `application.yml` (carry-forward from Phase 7 known limitations)
+- **History-aware retrieval / condense-question** — before embedding a follow-up question, prepend recent turns or invoke an LLM rewrite so pronouns and implicit references resolve to concrete terms before the vector search runs (carry-forward from Phase 7 known limitations)
 
 ### Claude Code Prompt
 ```

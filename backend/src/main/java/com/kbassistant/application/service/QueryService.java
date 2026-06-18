@@ -58,6 +58,10 @@ public class QueryService {
     }
 
     public QueryResult query(String question, List<DocumentId> documentFilter) {
+        return query(question, documentFilter, List.of());
+    }
+
+    public QueryResult query(String question, List<DocumentId> documentFilter, List<ChatTurn> conversationHistory) {
         long start = System.currentTimeMillis();
         log.info("Processing query: '{}'", question);
 
@@ -92,8 +96,8 @@ public class QueryService {
         // 5. Build context string, capped at MAX_CONTEXT_CHARS
         String context = buildContext(results, docNames);
 
-        // 6. Call LLM
-        String answer = llmPort.complete(SYSTEM_PROMPT, buildUserPrompt(question, context));
+        // 6. Call LLM, injecting prior conversation turns (empty for stateless /queries calls)
+        String answer = llmPort.complete(SYSTEM_PROMPT, conversationHistory, buildUserPrompt(question, context));
         log.info("LLM answer generated ({} chars)", answer.length());
 
         // 7. Build source citations for the response

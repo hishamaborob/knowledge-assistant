@@ -1,5 +1,6 @@
 package com.kbassistant.api.exception;
 
+import com.kbassistant.domain.exception.ChatSessionNotFoundException;
 import com.kbassistant.domain.exception.DocumentNotFoundException;
 import com.kbassistant.domain.exception.InvalidStatusTransitionException;
 import com.kbassistant.domain.exception.UnsupportedMimeTypeException;
@@ -21,6 +22,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DocumentNotFoundException.class)
     public ProblemDetail handleNotFound(DocumentNotFoundException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(ChatSessionNotFoundException.class)
+    public ProblemDetail handleChatSessionNotFound(ChatSessionNotFoundException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 

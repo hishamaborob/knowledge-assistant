@@ -64,7 +64,7 @@ cd backend
 | 4 | Chunking + embeddings — Ollama nomic-embed-text (768 dims), OpenAI fallback | ✅ Complete |
 | 5 | Query API — embed question → pgvector search → LLM answer + source citations | ✅ Complete |
 | 6 | Multi-provider LLM — Anthropic adapter + improved prompt engineering | ✅ Complete |
-| 7 | Conversation history — chat sessions, multi-turn context | Planned |
+| 7 | Conversation history — chat sessions, multi-turn context | ✅ Complete |
 | 8 | AWS deployment — Terraform, ECS Fargate, RDS, Secrets Manager | Planned |
 | 9 | Observability — Micrometer, Prometheus, Grafana dashboards | Planned |
 | 10 | Production hardening — JWT auth, rate limiting, circuit breakers, resilience | Planned |
@@ -119,7 +119,10 @@ knowledge-assistant/
 | GET | `/documents` | List all documents |
 | GET | `/documents/{id}` | Get document details and status |
 | DELETE | `/documents/{id}` | Delete document and its chunks |
-| POST | `/queries` | Ask a question, get a cited answer |
+| POST | `/queries` | Ask a question, get a cited answer (stateless) |
+| POST | `/sessions` | Create a chat session |
+| POST | `/sessions/{id}/messages` | Send a message in a session (multi-turn, history-aware) |
+| GET | `/sessions/{id}/messages` | Retrieve full conversation history for a session |
 | GET | `/actuator/health` | Health check |
 | GET | `/actuator/prometheus` | Prometheus metrics |
 

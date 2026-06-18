@@ -45,7 +45,7 @@ class QueryServiceTest {
                 .thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
         when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
-        when(llmPort.complete(anyString(), anyString())).thenReturn("Spring AI is a framework.");
+        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("Spring AI is a framework.");
 
         QueryResult result = queryService.query("What is Spring AI?", List.of());
 
@@ -54,7 +54,7 @@ class QueryServiceTest {
         assertThat(result.sources().get(0).documentName()).isEqualTo("Guide");
         assertThat(result.sources().get(0).score()).isEqualTo(0.92);
         assertThat(result.hasResults()).isTrue();
-        verify(llmPort).complete(anyString(), contains("Spring AI is great"));
+        verify(llmPort).complete(anyString(), anyList(), contains("Spring AI is great"));
     }
 
     @Test
@@ -93,7 +93,7 @@ class QueryServiceTest {
         when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
         when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
-        when(llmPort.complete(anyString(), anyString())).thenReturn("answer");
+        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
 
         QueryResult result = queryService.query("question", List.of());
 
@@ -111,7 +111,7 @@ class QueryServiceTest {
         when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
         when(documentRepository.findById(docId)).thenReturn(Optional.empty());
-        when(llmPort.complete(anyString(), anyString())).thenReturn("answer");
+        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
 
         QueryResult result = queryService.query("question", List.of());
 
@@ -132,12 +132,12 @@ class QueryServiceTest {
         when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(chunks);
         when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
-        when(llmPort.complete(anyString(), anyString())).thenReturn("answer");
+        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
 
         // Capture the user prompt passed to the LLM
         queryService.query("question", List.of());
 
-        verify(llmPort).complete(anyString(), argThat(userPrompt ->
+        verify(llmPort).complete(anyString(), anyList(), argThat(userPrompt ->
                 // The third chunk exceeds the budget so should not appear as [3]
                 !userPrompt.contains("[3]")
         ));
@@ -151,5 +151,21 @@ class QueryServiceTest {
         QueryResult result = queryService.query("question", List.of());
 
         assertThat(result.durationMs()).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    void query_twoArgOverload_passesEmptyHistory() {
+        Document doc = Document.create("Guide", "guide.pdf", MimeType.PDF, 1000L, "user");
+        DocumentChunk chunk = DocumentChunk.create(doc.id(), 0, "content", new float[768], 4);
+        ScoredChunk scoredChunk = new ScoredChunk(chunk, 0.9);
+
+        when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
+        when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
+        when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
+        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
+
+        queryService.query("question", List.of());
+
+        verify(llmPort).complete(anyString(), eq(List.of()), anyString());
     }
 }

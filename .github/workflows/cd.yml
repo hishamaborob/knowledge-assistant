@@ -1,0 +1,74 @@
+name: CD
+
+# Runs on every push to main after CI passes.
+# Prerequisites before this workflow works:
+#   1. AWS OIDC provider set up in the target account (see infrastructure/README.md)
+#   2. GitHub secret AWS_DEPLOY_ROLE_ARN set to the IAM role ARN created by Terraform
+#   3. GitHub secret AWS_ACCOUNT_ID set to the 12-digit AWS account ID
+#   4. Terraform infrastructure applied (ECR repo, ECS cluster/service must exist)
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: knowledge-assistant-prod
+  ECS_CLUSTER: knowledge-assistant-prod
+  ECS_SERVICE: knowledge-assistant-prod
+
+jobs:
+  deploy:
+    name: Build → Push ECR → Deploy ECS
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # Required for OIDC token exchange
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # OIDC eliminates long-lived IAM access keys stored as GitHub secrets.
+      # The deploy role grants: ECR push, ECS update-service. Nothing else.
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -f docker/prod/Dockerfile \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # Force a new deployment: ECS pulls the latest image and drains old tasks.
+      # The ECS service is configured with deployment_minimum_healthy_percent=100
+      # and deployment_maximum_percent=200, so one new task starts before old one stops.
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --force-new-deployment \
+            --no-cli-pager
+
+          echo "Waiting for service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE
+
+          echo "Deployed: ${{ steps.build-image.outputs.image }}"

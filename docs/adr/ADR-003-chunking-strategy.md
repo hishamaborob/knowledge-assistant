@@ -11,7 +11,7 @@ Options range from trivial (fixed character count) to expensive (LLM-based seman
 ## Decision
 
 **Phase 4:** Implement `FixedSizeChunker` — 512 tokens, 64 token overlap.
-**Phase 7:** Add `SemanticChunker` — split where embedding cosine similarity between adjacent sentences drops below a threshold.
+**Phase 10:** Add `SemanticChunker` — split where embedding cosine similarity between adjacent sentences drops below a threshold. (Phase 7 delivered conversation history instead.)
 
 The `ChunkingStrategy` port allows both to coexist and be selected per document type via config or document metadata.
 

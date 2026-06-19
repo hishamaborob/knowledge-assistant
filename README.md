@@ -21,16 +21,33 @@ See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for f
 ## Quick Start (Local)
 
 ```bash
-# 1. Start PostgreSQL + LocalStack S3
+# 1. Start PostgreSQL + LocalStack (S3 + Secrets Manager)
 docker compose -f docker/local/docker-compose.yml up -d
+# LocalStack init scripts run automatically:
+#   01-create-s3-bucket.sh  — creates the S3 bucket
+#   02-create-secrets.sh    — seeds /knowledge-assistant/local in Secrets Manager
 
 # 2. Start Ollama and pull required models
 ollama pull nomic-embed-text   # 768-dim embeddings
 ollama pull llama3.2           # local chat LLM
 
-# 3. Run the application
+# 3. Run the application (resolves secrets from LocalStack SM at startup)
 cd backend
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+## Quick Start (Production Docker Image)
+
+```bash
+# Build the production image (multi-stage, non-root, JRE Alpine)
+docker build -f docker/prod/Dockerfile -t knowledge-assistant:local .
+
+# Run against the local dev stack
+docker run --rm -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=local \
+  -e DB_URL=jdbc:postgresql://host.docker.internal:5432/knowledge_assistant \
+  -e DB_USERNAME=ka_user \
+  knowledge-assistant:local
 ```
 
 ---
@@ -47,6 +64,7 @@ cd backend
 | Build | Maven |
 | Cloud | AWS (ECS Fargate, RDS, S3, Secrets Manager) |
 | IaC | Terraform |
+| Secrets | Spring Cloud AWS Secrets Manager |
 | Containers | Docker, Docker Compose |
 | Observability | Micrometer, Prometheus, Grafana |
 | Testing | JUnit 5, Testcontainers, Mockito |
@@ -65,7 +83,7 @@ cd backend
 | 5 | Query API — embed question → pgvector search → LLM answer + source citations | ✅ Complete |
 | 6 | Multi-provider LLM — Anthropic adapter + improved prompt engineering | ✅ Complete |
 | 7 | Conversation history — chat sessions, multi-turn context | ✅ Complete |
-| 8 | AWS deployment — Terraform, ECS Fargate, RDS, Secrets Manager | Planned |
+| 8 | AWS deployment — Terraform, ECS Fargate, RDS, Secrets Manager, CD pipeline | ✅ Complete |
 | 9 | Observability — Micrometer, Prometheus, Grafana dashboards | Planned |
 | 10 | Production hardening — JWT auth, rate limiting, circuit breakers, resilience | Planned |
 
@@ -86,17 +104,21 @@ knowledge-assistant/
 │   │   └── application.yml
 │   └── pom.xml
 ├── infrastructure/
+│   ├── README.md               # Deploy guide, cost breakdown, teardown
 │   └── terraform/
 │       ├── modules/            # Reusable Terraform modules
-│       │   ├── security/       # VPC, Security Groups
-│       │   ├── rds/            # RDS PostgreSQL
-│       │   ├── ecs/            # ECS Fargate cluster + service
-│       │   ├── s3/             # S3 buckets
-│       │   ├── iam/            # IAM roles and policies
-│       │   └── monitoring/     # CloudWatch, alarms
-│       └── environments/
-│           ├── dev/
-│           └── prod/
+│       │   ├── vpc/            # VPC, subnets, NAT Gateway
+│       │   ├── security/       # Security groups (ALB, ECS, RDS)
+│       │   ├── ecr/            # Container registry
+│       │   ├── rds/            # RDS PostgreSQL 16 (pgvector)
+│       │   ├── s3/             # Document storage bucket
+│       │   ├── secrets/        # Secrets Manager secret
+│       │   ├── iam/            # Task execution role + task role
+│       │   ├── alb/            # Application Load Balancer, optional HTTPS
+│       │   └── ecs/            # ECS cluster, service, autoscaling
+│       ├── environments/
+│       │   └── prod/           # Wires all modules; S3 backend state
+│       └── bootstrap/          # One-time: S3 + DynamoDB for Terraform state
 ├── docker/
 │   ├── local/                  # docker-compose for local dev
 │   └── prod/                   # Production Dockerfile

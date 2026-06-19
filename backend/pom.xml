@@ -39,6 +39,8 @@
         <archunit.version>1.3.0</archunit.version>
         <!-- Resilience4j — circuit breaker, retry, bulkhead for LLM calls -->
         <resilience4j.version>2.2.0</resilience4j.version>
+        <!-- Spring Cloud AWS 3.2.x: Secrets Manager property source, compatible with Spring Boot 3.2+ -->
+        <spring-cloud-aws.version>3.2.1</spring-cloud-aws.version>
     </properties>
 
     <dependencyManagement>
@@ -76,6 +78,19 @@
                 <groupId>io.github.resilience4j</groupId>
                 <artifactId>resilience4j-bom</artifactId>
                 <version>${resilience4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!--
+                Spring Cloud AWS BOM: pins versions for all io.awspring.cloud artifacts.
+                3.2.x is compatible with Spring Boot 3.2+. Imported after AWS SDK BOM so
+                the AWS SDK BOM wins on any overlapping transitive version declarations.
+            -->
+            <dependency>
+                <groupId>io.awspring.cloud</groupId>
+                <artifactId>spring-cloud-aws-dependencies</artifactId>
+                <version>${spring-cloud-aws.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -233,12 +248,13 @@
         </dependency>
 
         <!--
-            Secrets Manager: fetch DB credentials and API keys at runtime.
-            In production, environment variables NEVER contain plaintext secrets.
+            Spring Cloud AWS Secrets Manager: auto-injects SM secret JSON keys as Spring
+            properties via spring.config.import. The raw AWS SDK secretsmanager artifact
+            comes in transitively from this starter — no separate SDK dep needed.
         -->
         <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>secretsmanager</artifactId>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-secrets-manager</artifactId>
         </dependency>
 
         <!--

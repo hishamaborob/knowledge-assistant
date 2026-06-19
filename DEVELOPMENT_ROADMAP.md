@@ -292,26 +292,30 @@ Two retrieval issues surfaced during manual testing that are not code bugs but i
 
 ---
 
-## Phase 8 — AWS Deployment
+## Phase 8 — AWS Deployment ✅ Complete
 
 **Goal:** Production-ready Terraform + ECS Fargate deployment.
 
 ### Deliverables
-- Terraform modules: `security`, `rds`, `ecs`, `s3`, `iam`, `monitoring`
-- Production `Dockerfile` (multi-stage, non-root, minimal image)
-- GitHub Actions: build → test → push ECR → deploy ECS
-- Secrets Manager integration via Spring Cloud AWS
-- RDS PostgreSQL with pgvector extension
-- ALB with HTTPS termination
+- Terraform modules: `vpc`, `security`, `ecr`, `rds`, `s3`, `secrets`, `iam`, `alb`, `ecs`
+- Bootstrap module for Terraform remote state (S3 + DynamoDB)
+- Production `Dockerfile` (multi-stage Maven → JRE Alpine, non-root user)
+- GitHub Actions CD: OIDC auth → ECR push → ECS force-deploy (`.github/workflows/cd.yml`)
+- Spring Cloud AWS Secrets Manager integration (`spring.config.import`)
+- `application-prod.yml` — SM import, Swagger disabled
+- LocalStack Secrets Manager seed script (`02-create-secrets.sh`)
+- `infrastructure/README.md` with deploy guide, OIDC setup, cost breakdown, teardown
 
-### Claude Code Prompt
-```
-We are in Phase 8. Generate the Terraform module for ECS Fargate that deploys the 
-knowledge-assistant container. Requirements: private subnet, task role with S3 + Secrets 
-Manager permissions, environment variables from Secrets Manager (not plaintext), 
-health check against /actuator/health, autoscaling 1-4 tasks based on CPU > 70%, 
-CloudWatch log group. Explain the IAM least-privilege design.
-```
+**Split implementation note:** Dockerfile + Spring Cloud AWS SM are locally testable against LocalStack. Terraform and CD pipeline are code-complete; apply when an AWS account is available (see `infrastructure/README.md`).
+
+### Key Decisions (see `docs/PHASE_8_PLAN.md` and `docs/adr/ADR-004-secrets-management.md`)
+- Spring Cloud AWS SM over ECS-native secrets injection — explicit startup failure if SM is unreachable
+- `optional:` prefix in local profile for graceful fallback when LocalStack is down
+- `MaxRAMPercentage=75.0` JVM flag — scales with ECS task memory resizes automatically
+- `lifecycle { ignore_changes = [task_definition] }` — Terraform manages service config, CI/CD manages image
+- Single NAT Gateway — acceptable for portfolio; add per-AZ for production multi-AZ
+- HTTPS optional (`enable_https = false`) — enable when Route53 domain is available
+- OIDC for GitHub Actions — no long-lived IAM keys stored in secrets
 
 ---
 

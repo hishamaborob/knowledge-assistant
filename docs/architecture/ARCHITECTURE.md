@@ -10,7 +10,7 @@
 7. [LLM Provider Abstraction](#llm-provider-abstraction)
 8. [Data Model](#data-model)
 9. [Security Architecture](#security-architecture)
-10. [AWS Architecture](#aws-architecture)
+10. [AWS Architecture](#aws-architecture) — Terraform module graph, secrets flow, CD pipeline
 
 ---
 
@@ -68,7 +68,7 @@ C4Container
         Container(ingestion, "Ingestion Pipeline", "Spring Batch (optional) / async threads", "Parses, chunks, embeds documents")
         Container(rag, "RAG Orchestrator", "Spring AI", "Retrieves chunks, builds prompts, calls LLM, assembles citations")
         ContainerDb(pg, "PostgreSQL + pgvector", "RDS PostgreSQL 16", "Stores document metadata, chunks, and 768-dim vector embeddings")
-        Container(cache, "Redis Cache", "ElastiCache (optional)", "Caches frequent query embeddings and LLM responses")
+        Container(cache, "Redis Cache", "ElastiCache (not yet implemented)", "Would cache frequent query embeddings and LLM responses — deferred beyond Phase 10")
     }
 
     System_Ext(s3, "AWS S3", "Raw document storage")
@@ -240,32 +240,35 @@ sequenceDiagram
     API-->>User: 200 OK {answer, sources[], durationMs}
 ```
 
-### AWS Deployment
+### AWS Deployment (CD Pipeline)
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Dev
-    participant GH as GitHub Actions
+    participant GH as GitHub Actions (cd.yml)
     participant ECR as AWS ECR
-    participant TF as Terraform
     participant ECS as ECS Fargate
-    participant RDS as RDS PostgreSQL
     participant SM as Secrets Manager
+    participant RDS as RDS PostgreSQL
     participant CW as CloudWatch
 
-    Dev->>GH: git push / PR merge to main
-    GH->>GH: mvn test (unit + integration via Testcontainers)
-    GH->>GH: docker build + trivy scan
-    GH->>ECR: docker push :latest + :{sha}
-    GH->>TF: terraform plan (on PR)
-    GH->>TF: terraform apply (on merge to main)
-    TF->>RDS: Provision RDS PostgreSQL + pgvector extension
-    TF->>ECS: Update task definition (new image digest)
-    ECS->>SM: Fetch DB_URL, API keys at container start
-    ECS->>RDS: Flyway migration on startup
-    ECS->>CW: Stream logs + emit custom metrics
-    GH-->>Dev: Deployment complete notification
+    Dev->>GH: git push to main
+    GH->>GH: OIDC token exchange → AWS STS credentials (deploy role)
+    GH->>GH: docker build -f docker/prod/Dockerfile
+    GH->>ECR: docker push :{sha} + :latest
+    GH->>ECS: aws ecs update-service --force-new-deployment
+    ECS->>ECR: Pull new image
+    ECS->>SM: Fetch /knowledge-assistant/prod secret (Spring Cloud AWS at startup)
+    Note over ECS,SM: DB_PASSWORD, OPENAI_API_KEY, ANTHROPIC_API_KEY injected as Spring properties
+    ECS->>RDS: Flyway migrations run (CREATE EXTENSION vector if not exists)
+    ECS->>CW: Stream logs via awslogs driver
+    ECS-->>GH: Task healthy (ALB health check /actuator/health passes)
+    GH->>GH: aws ecs wait services-stable
+    GH-->>Dev: Deployment complete
+
+    Note over GH: Terraform is run separately (manual or PR workflow)
+    Note over GH: CI (ci.yml) runs unit + integration tests + docker-build check
 ```
 
 ---
@@ -281,7 +284,7 @@ sequenceDiagram
 | **Semantic** | Split where embedding similarity drops | Dense technical docs | Expensive — 2× embedding calls |
 | **Recursive character** | LangChain-style, tries larger → smaller separators | Code + prose | Good default |
 
-**Implementation plan:** Start with fixed-size (512 tokens, 64 overlap). Add semantic chunking in Phase 7.
+**Implementation:** Fixed-size (512 tokens, 64 overlap) — shipped in Phase 4. Semantic chunking deferred to Phase 10.
 
 ### Embedding Model Selection
 
@@ -425,28 +428,30 @@ Request → TLS Termination (ALB)
 graph TB
     subgraph Internet
         User[API Consumer]
+        GH[GitHub Actions CD]
     end
 
     subgraph AWS["AWS Region (us-east-1)"]
-        subgraph Public["Public Subnets"]
-            ALB[Application Load Balancer]
+        subgraph Public["Public Subnets (2 AZs)"]
+            ALB[Application Load Balancer\nport 80 / 443]
+            NGW[NAT Gateway]
         end
 
-        subgraph Private["Private Subnets"]
+        subgraph Private["Private Subnets (2 AZs)"]
             subgraph ECS["ECS Fargate Cluster"]
-                Task[knowledge-assistant Task\n2 vCPU / 4GB RAM]
+                Task[knowledge-assistant Task\n0.5 vCPU / 1 GB RAM\nautoscaling 1-4 tasks]
             end
 
             subgraph Data["Data Tier"]
-                RDS[(RDS PostgreSQL 16\npgvector extension)]
+                RDS[(RDS PostgreSQL 16\npgvector extension\ndb.t3.micro encrypted)]
             end
         end
 
-        subgraph Services["AWS Services"]
-            S3[(S3 Bucket\nDocument Storage)]
-            SM[Secrets Manager\nAPI Keys + DB Creds]
-            ECR[ECR\nContainer Registry]
-            CW[CloudWatch\nLogs + Metrics]
+        subgraph Services["AWS Services (regional)"]
+            S3[(S3 Bucket\nDocument Storage\nSSE + versioning)]
+            SM[Secrets Manager\n/knowledge-assistant/prod\nDB password + API keys]
+            ECR[ECR\nContainer Registry\nscan on push]
+            CW[CloudWatch\nLogs + Metrics\n30-day retention]
         end
     end
 
@@ -465,5 +470,44 @@ graph TB
     Task --> OAI
     Task --> ANT
     Task --> GEM
+    Task --> NGW
+    GH --> ECR
     ECR --> Task
+```
+
+### Terraform Module Dependency Graph
+
+```
+bootstrap/          ← run once; creates S3 + DynamoDB for remote state
+environments/prod/
+  ├── vpc           ← VPC, subnets, IGW, NAT Gateway, route tables
+  ├── security      ← ALB / ECS / RDS security groups (depends: vpc)
+  ├── ecr           ← container registry (no dependencies)
+  ├── rds           ← PostgreSQL 16, random_password (depends: vpc, security)
+  ├── s3            ← document bucket (no dependencies)
+  ├── secrets       ← SM secret with rds.db_password output (depends: rds)
+  ├── iam           ← roles using secrets.secret_arn, s3.bucket_arn (depends: secrets, s3)
+  ├── alb           ← load balancer (depends: vpc, security)
+  └── ecs           ← cluster + service wiring everything together (depends: all above)
+```
+
+### Secrets Flow (Spring Cloud AWS)
+
+```
+ECS task starts
+  │
+  ├─ SPRING_PROFILES_ACTIVE=prod → Spring loads application-prod.yml
+  │
+  ├─ spring.config.import: aws-secretsmanager:/knowledge-assistant/prod
+  │     → Spring Cloud AWS calls SM GetSecretValue
+  │     → JSON keys injected as Spring properties:
+  │           DB_PASSWORD      → resolves ${DB_PASSWORD:ka_password} in application.yml
+  │           OPENAI_API_KEY   → resolves ${OPENAI_API_KEY:}
+  │           ANTHROPIC_API_KEY → resolves ${ANTHROPIC_API_KEY:}
+  │
+  ├─ DB_URL set as plaintext env var in ECS task def (not sensitive: just hostname + db name)
+  │
+  ├─ Flyway runs: CREATE EXTENSION IF NOT EXISTS vector (pgvector activated)
+  │
+  └─ /actuator/health → UP → ALB marks task healthy → traffic routed
 ```

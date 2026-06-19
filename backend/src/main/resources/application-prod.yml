@@ -1,0 +1,24 @@
+# Production profile — activated by SPRING_PROFILES_ACTIVE=prod in ECS task definition.
+# Secrets are fetched from AWS Secrets Manager at startup via spring.config.import.
+# The SM secret at /knowledge-assistant/prod must contain JSON keys that match the
+# ${...} expressions in application.yml: DB_PASSWORD, OPENAI_API_KEY, ANTHROPIC_API_KEY.
+
+spring:
+  config:
+    import: "aws-secretsmanager:/knowledge-assistant/prod"
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
+
+  # Disable Swagger UI and API docs in production.
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.kbassistant: INFO

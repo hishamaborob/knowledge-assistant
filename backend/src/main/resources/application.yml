@@ -2,6 +2,15 @@ spring:
   application:
     name: knowledge-assistant
 
+  # Spring Cloud AWS needs a region to initialize the SecretsManagerClient bean,
+  # even when no spring.config.import references SM (e.g. in tests).
+  # Profile-specific files (application-local.yml, application-prod.yml) override this
+  # with the same value or with a LocalStack endpoint override.
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/knowledge_assistant}
     username: ${DB_USERNAME:ka_user}

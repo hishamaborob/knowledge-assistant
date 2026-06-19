@@ -81,5 +81,3 @@ jobs:
 
       - name: Build Docker image
         run: docker build -f docker/prod/Dockerfile -t knowledge-assistant:ci .
-
-      # Phase 8: add docker push to ECR here

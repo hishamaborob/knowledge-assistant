@@ -1,0 +1,14 @@
+# Copy this file to terraform.tfvars (gitignored) and fill in real values.
+
+aws_region         = "us-east-1"
+project_name       = "knowledge-assistant"
+rds_instance_class = "db.t3.micro"
+llm_provider       = "openai"
+
+# API keys — never commit these.
+openai_api_key    = "sk-..."
+anthropic_api_key = ""    # Leave empty if not using Anthropic
+
+# HTTPS — set to true only when you have a hosted zone in Route53.
+enable_https = false
+domain_name  = ""    # e.g. "knowledge-assistant.example.com"

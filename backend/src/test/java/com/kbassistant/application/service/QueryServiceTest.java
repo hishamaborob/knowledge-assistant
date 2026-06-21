@@ -5,6 +5,7 @@ import com.kbassistant.domain.port.out.DocumentRepository;
 import com.kbassistant.domain.port.out.EmbeddingPort;
 import com.kbassistant.domain.port.out.LlmPort;
 import com.kbassistant.domain.port.out.VectorStorePort;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +26,9 @@ class QueryServiceTest {
     @Mock VectorStorePort vectorStorePort;
     @Mock LlmPort llmPort;
     @Mock DocumentRepository documentRepository;
+    @Mock EvaluationService evaluationService;
+
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     QueryService queryService;
 
@@ -32,7 +36,7 @@ class QueryServiceTest {
     void setUp() {
         queryService = new QueryService(
                 embeddingPort, vectorStorePort, llmPort, documentRepository,
-                0.75, 10);
+                evaluationService, 0.75, 10, "openai", meterRegistry);
     }
 
     @Test
@@ -58,6 +62,23 @@ class QueryServiceTest {
     }
 
     @Test
+    void query_happyPath_recordsQueryTimer() {
+        Document doc = Document.create("Guide", "guide.pdf", MimeType.PDF, 1000L, "user");
+        DocumentChunk chunk = DocumentChunk.create(doc.id(), 0, "Spring AI is great", new float[768], 4);
+        ScoredChunk scoredChunk = new ScoredChunk(chunk, 0.92);
+
+        when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
+        when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
+        when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
+        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
+
+        queryService.query("What is Spring AI?", List.of());
+
+        assertThat(meterRegistry.timer("chat.query.duration", "provider", "openai").count())
+                .isEqualTo(1);
+    }
+
+    @Test
     void query_noResults_returnsNoResultsMessageWithoutCallingLlm() {
         when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(List.of());
@@ -68,6 +89,17 @@ class QueryServiceTest {
         assertThat(result.sources()).isEmpty();
         assertThat(result.hasResults()).isFalse();
         verifyNoInteractions(llmPort);
+    }
+
+    @Test
+    void query_noResults_recordsSearchOutcomeNotFound() {
+        when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
+        when(vectorStorePort.similaritySearch(any())).thenReturn(List.of());
+
+        queryService.query("Unknown topic", List.of());
+
+        assertThat(meterRegistry.summary("similarity.search.results", "outcome", "not_found").count())
+                .isEqualTo(1);
     }
 
     @Test

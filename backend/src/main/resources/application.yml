@@ -151,6 +151,9 @@ app:
     top-k: 10
   chat:
     history-window: 10  # Max prior messages (5 exchanges) injected into the LLM prompt
+  evaluation:
+    enabled: true
+    sample-rate: 0.2  # Evaluate 20% of queries to bound LLM API cost
 
 # SpringDoc: disable in production via app.springdoc.enabled=false
 springdoc:

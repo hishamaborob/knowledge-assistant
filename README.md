@@ -84,7 +84,7 @@ docker run --rm -p 8080:8080 \
 | 6 | Multi-provider LLM — Anthropic adapter + improved prompt engineering | ✅ Complete |
 | 7 | Conversation history — chat sessions, multi-turn context | ✅ Complete |
 | 8 | AWS deployment — Terraform, ECS Fargate, RDS, Secrets Manager, CD pipeline | ✅ Complete |
-| 9 | Observability — Micrometer, Prometheus, Grafana dashboards | Planned |
+| 9 | Observability — Micrometer metrics, Grafana dashboards, LLM-as-a-judge evaluation | ✅ Complete |
 | 10 | Production hardening — JWT auth, rate limiting, circuit breakers, resilience | Planned |
 
 ---

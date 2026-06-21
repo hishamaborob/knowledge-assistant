@@ -12,3 +12,6 @@ anthropic_api_key = ""    # Leave empty if not using Anthropic
 # HTTPS — set to true only when you have a hosted zone in Route53.
 enable_https = false
 domain_name  = ""    # e.g. "knowledge-assistant.example.com"
+
+# Monitoring — set an email address to receive CloudWatch alarm notifications.
+sns_alarm_email = ""    # e.g. "ops@example.com"

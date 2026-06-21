@@ -11,6 +11,7 @@
 8. [Data Model](#data-model)
 9. [Security Architecture](#security-architecture)
 10. [AWS Architecture](#aws-architecture) — Terraform module graph, secrets flow, CD pipeline
+11. [Observability](#observability) — metrics taxonomy, evaluation pipeline, Grafana
 
 ---
 
@@ -511,3 +512,98 @@ ECS task starts
   │
   └─ /actuator/health → UP → ALB marks task healthy → traffic routed
 ```
+
+---
+
+## Observability
+
+### Metrics Taxonomy
+
+All custom metrics live in the **application layer** (`QueryService`, `EmbeddingService`, `IngestionService`, `EvaluationService`). `MeterRegistry` is injected via constructor — not in domain (ArchUnit enforced), not in infrastructure adapters (insufficient business context for tagging).
+
+```
+Operational metrics (what is the system doing?)
+│
+├── chat.query.duration          [Timer]              tag: provider
+│     End-to-end RAG pipeline latency
+│
+├── llm.completion.duration      [Timer]              tag: provider
+│     LLM call in isolation — reveals LLM's share of tail latency
+│
+├── similarity.search.results    [DistributionSummary] tag: outcome=found|not_found
+│     Count of chunks returned; outcome tag tracks hit/miss rate
+│
+├── embedding.generation.duration [Timer]             tag: batch_size
+│     Embedding batch latency; batch_size exposes non-linear scaling
+│
+├── ingestion.pipeline.duration   [Timer]             tag: status=success|failure
+│     Full per-document pipeline; failure tag splits the distribution
+│
+└── document.ingested             [Counter]           tag: status=success|failure
+      Monotonically increasing total; rate() gives ingestion throughput
+
+Quality metrics (are the answers good?)
+│
+├── rag.evaluation.faithfulness   [DistributionSummary] tag: provider
+│     LLM judge score 0–1: answer claims supported by retrieved context
+│
+└── rag.evaluation.answer_relevance [DistributionSummary] tag: provider
+      LLM judge score 0–1: answer addresses the question
+```
+
+**Why these types:**
+- **Timer**: captures duration + rate in one instrument (`_count`, `_sum`, `_bucket`). Any "how long did X take?" is a timer.
+- **DistributionSummary**: like Timer but for non-time values. Chunk counts and quality scores (0–1 floats) are not durations.
+- **Counter**: monotonically increasing event count. Latency is irrelevant for "how many documents were ingested."
+- **Gauge** (not used): current point-in-time value (queue depth, pool size). None of the above are instantaneous readings.
+
+**Tag cardinality rule**: all tags are low-cardinality. `provider` (3–4 values), `status`/`outcome` (2 values each), `batch_size` (bounded by `app.embedding.batch-size`). Never tag with document IDs, session IDs, or question text.
+
+### LLM-as-a-Judge Evaluation Pipeline
+
+```
+QueryService.query() completes
+  │
+  └─ evaluationService.evaluate(question, context, answer)
+       │  (async fire-and-forget via @Async("evaluationTaskExecutor"))
+       │  (sampled: only fires for app.evaluation.sample-rate fraction of calls)
+       │
+       ├─ llmPort.complete(FAITHFULNESS_SYSTEM_PROMPT, faithfulnessUserPrompt)
+       │     → parse 0.0–1.0 float → clamp → record rag.evaluation.faithfulness
+       │
+       └─ llmPort.complete(RELEVANCE_SYSTEM_PROMPT, relevanceUserPrompt)
+             → parse 0.0–1.0 float → clamp → record rag.evaluation.answer_relevance
+
+Exceptions: caught and logged as WARN — never propagate to the query caller
+Non-numeric responses: fall back to 0.5 (neutral) + WARN log
+```
+
+**Why this doesn't block users:** `EvaluationService.evaluate()` is annotated `@Async("evaluationTaskExecutor")`. When `QueryService` calls it, Spring's AOP proxy intercepts the call and dispatches it to the evaluation virtual-thread executor. Control returns to `QueryService` immediately; the user's response is returned before the judge calls even begin.
+
+### Grafana Dashboard
+
+Locally available via `docker compose -f docker/local/docker-compose.yml --profile monitoring up -d`.
+
+Auto-provisioned from:
+- `docker/local/grafana/provisioning/datasources/prometheus.yml` — Prometheus datasource (uid: `prometheus`, url: `http://prometheus:9090`)
+- `docker/local/grafana/provisioning/dashboards/dashboard.yml` — scans `/var/lib/grafana/dashboards`
+- `docker/local/grafana/dashboards/knowledge-assistant.json` — 8-panel dashboard
+
+| Panel | What it reveals |
+|---|---|
+| Query rate | Traffic volume; spot traffic spikes |
+| Query P95 latency | End-to-end user-perceived latency |
+| LLM P95 latency | LLM's share of query latency; identifies provider-specific slowdowns |
+| Search outcomes | Retrieval hit rate — `not_found` spike = docs missing or threshold too high |
+| Ingestion pipeline | Success/failure ratio; spot embedding provider errors |
+| Embedding latency by batch | Non-linear scaling signal; informs batch-size tuning |
+| Faithfulness P50 | Rolling median answer grounding; persistent < 0.7 = prompt or retrieval problem |
+| Answer relevance P50 | Rolling median relevance; persistent < 0.7 = off-topic answers |
+
+### CloudWatch Alarms (AWS, applied via Terraform)
+
+| Alarm | Condition | Action |
+|---|---|---|
+| ECS CPU high | > 80% for 2 × 5-min periods | SNS → email |
+| Service down | Running tasks < 1 | SNS → email (immediate) |
+| 5xx errors | ALB 5xx count > 10 in 5 min | SNS → email |

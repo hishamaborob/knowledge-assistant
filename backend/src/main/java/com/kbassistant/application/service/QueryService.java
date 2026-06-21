@@ -5,6 +5,8 @@ import com.kbassistant.domain.port.out.DocumentRepository;
 import com.kbassistant.domain.port.out.EmbeddingPort;
 import com.kbassistant.domain.port.out.LlmPort;
 import com.kbassistant.domain.port.out.VectorStorePort;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,21 +42,38 @@ public class QueryService {
     private final VectorStorePort vectorStorePort;
     private final LlmPort llmPort;
     private final DocumentRepository documentRepository;
+    private final EvaluationService evaluationService;
     private final double similarityThreshold;
     private final int topK;
+    private final MeterRegistry meterRegistry;
+    private final Timer queryTimer;
+    private final Timer llmTimer;
 
     public QueryService(EmbeddingPort embeddingPort,
                         VectorStorePort vectorStorePort,
                         LlmPort llmPort,
                         DocumentRepository documentRepository,
+                        EvaluationService evaluationService,
                         @Value("${app.similarity.threshold:0.75}") double similarityThreshold,
-                        @Value("${app.similarity.top-k:10}") int topK) {
+                        @Value("${app.similarity.top-k:10}") int topK,
+                        @Value("${app.llm.provider:openai}") String llmProvider,
+                        MeterRegistry meterRegistry) {
         this.embeddingPort = embeddingPort;
         this.vectorStorePort = vectorStorePort;
         this.llmPort = llmPort;
         this.documentRepository = documentRepository;
+        this.evaluationService = evaluationService;
         this.similarityThreshold = similarityThreshold;
         this.topK = topK;
+        this.meterRegistry = meterRegistry;
+        this.queryTimer = Timer.builder("chat.query.duration")
+                .description("End-to-end RAG query duration including embed, search, LLM, and source build")
+                .tag("provider", llmProvider)
+                .register(meterRegistry);
+        this.llmTimer = Timer.builder("llm.completion.duration")
+                .description("LLM completion call duration")
+                .tag("provider", llmProvider)
+                .register(meterRegistry);
     }
 
     public QueryResult query(String question, List<DocumentId> documentFilter) {
@@ -63,6 +82,7 @@ public class QueryService {
 
     public QueryResult query(String question, List<DocumentId> documentFilter, List<ChatTurn> conversationHistory) {
         long start = System.currentTimeMillis();
+        Timer.Sample querySample = Timer.start(meterRegistry);
         log.info("Processing query: '{}'", question);
 
         // 1. Embed the question with the same model used during ingestion
@@ -81,8 +101,12 @@ public class QueryService {
         List<ScoredChunk> results = vectorStorePort.similaritySearch(builder.build());
         log.info("Similarity search returned {} chunks", results.size());
 
+        meterRegistry.summary("similarity.search.results", "outcome", results.isEmpty() ? "not_found" : "found")
+                .record(results.size());
+
         // 3. No relevant chunks — return without calling the LLM
         if (results.isEmpty()) {
+            querySample.stop(queryTimer);
             return new QueryResult(
                     "No relevant documents found for this question.",
                     List.of(),
@@ -97,12 +121,18 @@ public class QueryService {
         String context = buildContext(results, docNames);
 
         // 6. Call LLM, injecting prior conversation turns (empty for stateless /queries calls)
+        Timer.Sample llmSample = Timer.start(meterRegistry);
         String answer = llmPort.complete(SYSTEM_PROMPT, conversationHistory, buildUserPrompt(question, context));
+        llmSample.stop(llmTimer);
         log.info("LLM answer generated ({} chars)", answer.length());
 
         // 7. Build source citations for the response
         List<SourceChunk> sources = buildSources(results, docNames);
 
+        // 8. Async LLM-as-a-judge evaluation (fire-and-forget, non-critical)
+        evaluationService.evaluate(question, context, answer);
+
+        querySample.stop(queryTimer);
         return new QueryResult(answer, sources, System.currentTimeMillis() - start);
     }
 

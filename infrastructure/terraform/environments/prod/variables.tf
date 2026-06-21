@@ -53,3 +53,8 @@ variable "anthropic_api_key" {
   sensitive = true
   default   = ""
 }
+
+variable "sns_alarm_email" {
+  type    = string
+  default = ""
+}

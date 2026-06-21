@@ -104,3 +104,13 @@ module "ecs" {
   docs_bucket_name   = module.s3.bucket_name
   llm_provider       = var.llm_provider
 }
+
+module "monitoring" {
+  source            = "../../modules/monitoring"
+  project_name      = var.project_name
+  environment       = "prod"
+  ecs_cluster_name  = module.ecs.cluster_name
+  ecs_service_name  = module.ecs.service_name
+  alb_arn_suffix    = module.alb.alb_arn_suffix
+  sns_alarm_email   = var.sns_alarm_email
+}

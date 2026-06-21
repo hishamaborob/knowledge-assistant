@@ -7,6 +7,7 @@ import com.kbassistant.domain.model.DocumentId;
 import com.kbassistant.domain.port.out.DocumentRepository;
 import com.kbassistant.domain.port.out.DocumentStorePort;
 import com.kbassistant.domain.port.out.TextExtractorPort;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -26,15 +27,18 @@ public class IngestionService {
     private final DocumentStorePort documentStorePort;
     private final TextExtractorPort textExtractorPort;
     private final ApplicationEventPublisher eventPublisher;
+    private final MeterRegistry meterRegistry;
 
     public IngestionService(DocumentRepository documentRepository,
                             DocumentStorePort documentStorePort,
                             TextExtractorPort textExtractorPort,
-                            ApplicationEventPublisher eventPublisher) {
+                            ApplicationEventPublisher eventPublisher,
+                            MeterRegistry meterRegistry) {
         this.documentRepository = documentRepository;
         this.documentStorePort = documentStorePort;
         this.textExtractorPort = textExtractorPort;
         this.eventPublisher = eventPublisher;
+        this.meterRegistry = meterRegistry;
     }
 
     // AFTER_COMMIT: guarantees the document's STORED status is visible before this runs.
@@ -65,10 +69,13 @@ public class IngestionService {
             // Phase 4 adds a handler for TextExtractedEvent that chunks + embeds.
             eventPublisher.publishEvent(new TextExtractedEvent(this, documentId, extractedText));
 
+            meterRegistry.counter("document.ingested", "status", "success").increment();
+
         } catch (Exception e) {
             log.error("Ingestion failed for document {}: {}", documentId, e.getMessage(), e);
             document.markFailed(e.getMessage());
             documentRepository.save(document);
+            meterRegistry.counter("document.ingested", "status", "failure").increment();
         }
     }
 }

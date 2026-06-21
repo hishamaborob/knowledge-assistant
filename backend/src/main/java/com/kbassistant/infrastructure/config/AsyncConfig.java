@@ -30,4 +30,13 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean(name = "evaluationTaskExecutor")
+    public TaskExecutor evaluationTaskExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setVirtualThreads(true);
+        executor.setThreadNamePrefix("evaluation-");
+        executor.initialize();
+        return executor;
+    }
 }

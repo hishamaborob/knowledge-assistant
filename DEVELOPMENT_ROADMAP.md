@@ -319,26 +319,23 @@ Two retrieval issues surfaced during manual testing that are not code bugs but i
 
 ---
 
-## Phase 9 — Observability
+## Phase 9 — Observability ✅ Complete
 
-**Goal:** Full production observability — metrics, dashboards, structured logging, distributed tracing.
+**Goal:** Operational observability (metrics, dashboards, alarms) + answer quality observability (LLM-as-a-judge evaluation).
 
 ### Deliverables
-- Micrometer custom metrics: ingestion duration, embedding latency, LLM latency, similarity scores
-- Prometheus scrape endpoint
-- Grafana dashboard JSON
-- Structured logging with trace IDs
-- CloudWatch alarms for error rates and latency
+- 6 custom Micrometer metrics across `QueryService`, `EmbeddingService`, `IngestionService`: timers, distribution summaries, counter
+- 2 RAG evaluation metrics via `EvaluationService`: `rag.evaluation.faithfulness`, `rag.evaluation.answer_relevance`
+- Auto-provisioned Grafana dashboard (8 panels) under `docker compose --profile monitoring`
+- Structured JSON logging for prod profile (`logging.structured.format.console: ecs`)
+- CloudWatch alarms Terraform module (ECS CPU, task count, ALB 5xx)
 
-### Claude Code Prompt
-```
-We are in Phase 9. Add Micrometer instrumentation to ChatService and IngestionService. 
-Metrics to capture: chat.query.duration (timer, tag: provider), 
-embedding.generation.duration (timer, tag: batch_size), 
-similarity.search.results (distribution summary, tag: above/below threshold), 
-ingestion.pipeline.duration (timer, tag: status success/failure). 
-Show me the instrumentation pattern and explain gauge vs counter vs timer choice for each.
-```
+### Key Decisions (see `docs/PHASE_9_PLAN.md` and `docs/adr/ADR-005-rag-evaluation.md`)
+- **Timer** for latency metrics; **DistributionSummary** for chunk counts and quality scores; **Counter** for ingestion totals — see plan for full rationale
+- **LLM-as-a-judge over RAGAS**: single-prompt 0–1 scoring (no ground truth needed); full RAGAS decomposition deferred until eval dataset is available
+- **Async + 20% sampling** on evaluation: zero user latency impact; cost bounded by `app.evaluation.sample-rate`
+- **MeterRegistry in application layer only**: domain stays pure Java; ArchUnit passes
+- **Spring Boot 3.4 built-in structured logging** (`ecs` format): no extra library needed
 
 ---
 

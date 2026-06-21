@@ -18,37 +18,46 @@ See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for f
 
 ---
 
-## Quick Start (Local)
+## Quick Start
+
+### With Make (recommended)
+
+Prerequisites: Docker, Ollama running locally with `nomic-embed-text` + `llama3.2` pulled.
 
 ```bash
-# 1. Start PostgreSQL + LocalStack (S3 + Secrets Manager)
+make start       # Build image → start Postgres + LocalStack → run app → wait for /health
+make stop        # Stop app first, then all infrastructure (safe drain order)
+make logs        # Tail live app output
+make monitoring  # Add Prometheus + Grafana to a running stack (localhost:3000)
+```
+
+Run `make` with no arguments to list all commands.
+
+### Manual (Spring Boot dev mode)
+
+Useful for faster iteration — no Docker image rebuild on code changes.
+
+```bash
+# 1. Start infrastructure
 docker compose -f docker/local/docker-compose.yml up -d
-# LocalStack init scripts run automatically:
-#   01-create-s3-bucket.sh  — creates the S3 bucket
-#   02-create-secrets.sh    — seeds /knowledge-assistant/local in Secrets Manager
 
-# 2. Start Ollama and pull required models
-ollama pull nomic-embed-text   # 768-dim embeddings
-ollama pull llama3.2           # local chat LLM
+# 2. Pull Ollama models (first time only)
+ollama pull nomic-embed-text
+ollama pull llama3.2
 
-# 3. Run the application (resolves secrets from LocalStack SM at startup)
-cd backend
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+# 3. Run the app
+cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-## Quick Start (Production Docker Image)
+Once started, the app is available at:
 
-```bash
-# Build the production image (multi-stage, non-root, JRE Alpine)
-docker build -f docker/prod/Dockerfile -t knowledge-assistant:local .
-
-# Run against the local dev stack
-docker run --rm -p 8080:8080 \
-  -e SPRING_PROFILES_ACTIVE=local \
-  -e DB_URL=jdbc:postgresql://host.docker.internal:5432/knowledge_assistant \
-  -e DB_USERNAME=ka_user \
-  knowledge-assistant:local
-```
+| Endpoint | URL |
+|---|---|
+| App | http://localhost:8080 |
+| Swagger UI | http://localhost:8080/swagger-ui.html |
+| Health | http://localhost:8080/actuator/health |
+| Metrics | http://localhost:8080/actuator/prometheus |
+| Grafana | http://localhost:3000 (after `make monitoring`) |
 
 ---
 
@@ -69,6 +78,7 @@ docker run --rm -p 8080:8080 \
 | Observability | Micrometer, Prometheus, Grafana |
 | Testing | JUnit 5, Testcontainers, Mockito |
 | CI/CD | GitHub Actions |
+| Dev tooling | Make (local lifecycle) |
 
 ---
 
@@ -126,6 +136,7 @@ knowledge-assistant/
 │   ├── architecture/           # C4 diagrams, ADRs
 │   ├── adr/                    # Architecture Decision Records
 │   └── api/                    # OpenAPI spec
+├── Makefile                    # Local dev lifecycle (make start / stop / logs / monitoring)
 ├── scripts/                    # Dev utility scripts
 └── .github/
     └── workflows/              # CI/CD pipelines

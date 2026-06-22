@@ -35,6 +35,7 @@ start: ## Build image → start infrastructure → run app (full local stack)
 	  -e DB_USERNAME=ka_user \
 	  -e DB_PASSWORD=ka_password \
 	  -e AWS_ENDPOINT_OVERRIDE=http://host.docker.internal:4566 \
+	  -e SPRING_AI_OLLAMA_BASE_URL=http://host.docker.internal:11434 \
 	  $(IMAGE) > /dev/null
 	@echo ""
 	@echo "▶  Waiting for app to be healthy..."

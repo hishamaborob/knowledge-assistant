@@ -9,7 +9,10 @@ public record ChatMessageHistoryItem(
         String role,
         String content,
         List<SourceChunkResponse> citations,
-        String createdAt
+        String createdAt,
+        Integer promptTokens,
+        Integer completionTokens,
+        String modelUsed
 ) {
     public static ChatMessageHistoryItem from(ChatMessage message) {
         return new ChatMessageHistoryItem(
@@ -17,7 +20,10 @@ public record ChatMessageHistoryItem(
                 message.role().name(),
                 message.content(),
                 message.citations().stream().map(SourceChunkResponse::from).toList(),
-                message.createdAt().toString()
+                message.createdAt().toString(),
+                message.promptTokens(),
+                message.completionTokens(),
+                message.modelUsed()
         );
     }
 }

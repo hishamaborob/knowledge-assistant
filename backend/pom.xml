@@ -113,6 +113,16 @@
         </dependency>
 
         <!--
+            Security: API key authentication via custom OncePerRequestFilter.
+            When app.security.api-keys is empty (default), all requests pass through
+            (dev mode). Production sets keys via Secrets Manager.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!--
             Data JPA: Hibernate 6.6 + HikariCP + Spring Data repositories.
             Hibernate 6 natively maps UUID columns — no @Type workaround needed.
         -->

@@ -36,7 +36,7 @@ class QueryServiceTest {
     void setUp() {
         queryService = new QueryService(
                 embeddingPort, vectorStorePort, llmPort, documentRepository,
-                evaluationService, 0.75, 10, "openai", meterRegistry);
+                evaluationService, 0.75, 10, "openai", meterRegistry, 0.5, "openai");
     }
 
     @Test
@@ -49,7 +49,8 @@ class QueryServiceTest {
                 .thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
         when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
-        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("Spring AI is a framework.");
+        when(llmPort.complete(anyString(), anyList(), anyString()))
+                .thenReturn(new LlmResponse("Spring AI is a framework.", 100, 50, "gpt-4o"));
 
         QueryResult result = queryService.query("What is Spring AI?", List.of());
 
@@ -58,6 +59,9 @@ class QueryServiceTest {
         assertThat(result.sources().get(0).documentName()).isEqualTo("Guide");
         assertThat(result.sources().get(0).score()).isEqualTo(0.92);
         assertThat(result.hasResults()).isTrue();
+        assertThat(result.promptTokens()).isEqualTo(100);
+        assertThat(result.completionTokens()).isEqualTo(50);
+        assertThat(result.modelUsed()).isEqualTo("gpt-4o");
         verify(llmPort).complete(anyString(), anyList(), contains("Spring AI is great"));
     }
 
@@ -70,7 +74,8 @@ class QueryServiceTest {
         when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
         when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
-        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
+        when(llmPort.complete(anyString(), anyList(), anyString()))
+                .thenReturn(new LlmResponse("answer", 100, 50, "gpt-4o"));
 
         queryService.query("What is Spring AI?", List.of());
 
@@ -88,6 +93,9 @@ class QueryServiceTest {
         assertThat(result.answer()).contains("No relevant documents found");
         assertThat(result.sources()).isEmpty();
         assertThat(result.hasResults()).isFalse();
+        assertThat(result.promptTokens()).isEqualTo(0);
+        assertThat(result.completionTokens()).isEqualTo(0);
+        assertThat(result.modelUsed()).isEqualTo("none");
         verifyNoInteractions(llmPort);
     }
 
@@ -125,7 +133,8 @@ class QueryServiceTest {
         when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
         when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
-        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
+        when(llmPort.complete(anyString(), anyList(), anyString()))
+                .thenReturn(new LlmResponse("answer", 0, 0, "gpt-4o"));
 
         QueryResult result = queryService.query("question", List.of());
 
@@ -143,7 +152,8 @@ class QueryServiceTest {
         when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
         when(documentRepository.findById(docId)).thenReturn(Optional.empty());
-        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
+        when(llmPort.complete(anyString(), anyList(), anyString()))
+                .thenReturn(new LlmResponse("answer", 0, 0, "gpt-4o"));
 
         QueryResult result = queryService.query("question", List.of());
 
@@ -164,7 +174,8 @@ class QueryServiceTest {
         when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(chunks);
         when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
-        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
+        when(llmPort.complete(anyString(), anyList(), anyString()))
+                .thenReturn(new LlmResponse("answer", 0, 0, "gpt-4o"));
 
         // Capture the user prompt passed to the LLM
         queryService.query("question", List.of());
@@ -194,7 +205,8 @@ class QueryServiceTest {
         when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
         when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(scoredChunk));
         when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
-        when(llmPort.complete(anyString(), anyList(), anyString())).thenReturn("answer");
+        when(llmPort.complete(anyString(), anyList(), anyString()))
+                .thenReturn(new LlmResponse("answer", 0, 0, "gpt-4o"));
 
         queryService.query("question", List.of());
 

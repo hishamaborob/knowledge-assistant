@@ -8,10 +8,8 @@ import java.util.Objects;
  * A single turn in a chat session. Queried independently from ChatSession,
  * same precedent as DocumentChunk vs. Document.
  *
- * promptTokens/completionTokens/modelUsed are always null in this phase —
- * the schema carries the columns, but LlmPort still returns a plain String
- * with no usage metadata. Populating them is deferred to the Observability
- * phase, which needs the same data for Micrometer instrumentation anyway.
+ * promptTokens/completionTokens/modelUsed are populated for ASSISTANT messages
+ * from the LlmResponse returned by QueryService.
  */
 public class ChatMessage {
 
@@ -28,6 +26,12 @@ public class ChatMessage {
     private ChatMessage() {}
 
     public static ChatMessage create(ChatSessionId sessionId, ChatRole role, String content, List<SourceChunk> citations) {
+        return create(sessionId, role, content, citations, null, null, null);
+    }
+
+    public static ChatMessage create(ChatSessionId sessionId, ChatRole role, String content,
+                                      List<SourceChunk> citations,
+                                      Integer promptTokens, Integer completionTokens, String modelUsed) {
         Objects.requireNonNull(sessionId, "sessionId");
         Objects.requireNonNull(role, "role");
         Objects.requireNonNull(content, "content");
@@ -38,6 +42,9 @@ public class ChatMessage {
         message.role = role;
         message.content = content;
         message.citations = citations != null ? citations : List.of();
+        message.promptTokens = promptTokens;
+        message.completionTokens = completionTokens;
+        message.modelUsed = modelUsed;
         message.createdAt = Instant.now();
         return message;
     }

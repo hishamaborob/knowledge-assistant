@@ -1,5 +1,6 @@
 package com.kbassistant.application.service;
 
+import com.kbassistant.domain.model.LlmResponse;
 import com.kbassistant.domain.port.out.LlmPort;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -47,8 +48,8 @@ class EvaluationServiceTest {
 
         // First call: faithfulness prompt, second call: relevance prompt
         when(llmPort.complete(anyString(), anyString()))
-                .thenReturn("0.9")
-                .thenReturn("0.8");
+                .thenReturn(new LlmResponse("0.9", 10, 5, "gpt-4o"))
+                .thenReturn(new LlmResponse("0.8", 10, 5, "gpt-4o"));
 
         service.evaluate("question", "context", "answer");
 
@@ -68,7 +69,8 @@ class EvaluationServiceTest {
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         EvaluationService service = new EvaluationService(llmPort, true, 1.0, "openai", meterRegistry);
 
-        when(llmPort.complete(anyString(), anyString())).thenReturn("not a number");
+        when(llmPort.complete(anyString(), anyString()))
+                .thenReturn(new LlmResponse("not a number", 10, 5, "gpt-4o"));
 
         service.evaluate("question", "context", "answer");
 

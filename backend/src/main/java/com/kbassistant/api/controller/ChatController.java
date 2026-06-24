@@ -10,6 +10,7 @@ import com.kbassistant.domain.model.ChatSession;
 import com.kbassistant.domain.model.ChatSessionId;
 import com.kbassistant.domain.model.DocumentId;
 import com.kbassistant.domain.model.QueryResult;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -39,6 +40,7 @@ public class ChatController {
     }
 
     @PostMapping("/{sessionId}/messages")
+    @RateLimiter(name = "chatApi")
     @Operation(summary = "Send a message in a session", description =
             "Injects prior turns as conversation history before embedding, searching, and generating an answer.")
     public ChatMessageResponse sendMessage(@PathVariable String sessionId,

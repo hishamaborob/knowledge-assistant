@@ -7,7 +7,7 @@ import com.kbassistant.domain.model.Document;
 import com.kbassistant.domain.port.out.DocumentRepository;
 import com.kbassistant.domain.port.out.EmbeddingPort;
 import com.kbassistant.domain.port.out.VectorStorePort;
-import com.kbassistant.domain.service.FixedSizeChunker;
+import com.kbassistant.domain.service.ChunkingStrategy;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
@@ -30,13 +30,13 @@ public class EmbeddingService {
     private final DocumentRepository documentRepository;
     private final EmbeddingPort embeddingPort;
     private final VectorStorePort vectorStorePort;
-    private final FixedSizeChunker chunker;
+    private final ChunkingStrategy chunker;
     private final MeterRegistry meterRegistry;
 
     public EmbeddingService(DocumentRepository documentRepository,
                             EmbeddingPort embeddingPort,
                             VectorStorePort vectorStorePort,
-                            FixedSizeChunker chunker,
+                            ChunkingStrategy chunker,
                             MeterRegistry meterRegistry) {
         this.documentRepository = documentRepository;
         this.embeddingPort = embeddingPort;

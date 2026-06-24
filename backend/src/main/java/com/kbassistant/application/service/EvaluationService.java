@@ -101,7 +101,7 @@ public class EvaluationService {
     }
 
     private double scoreWith(String userPrompt) {
-        String response = llmPort.complete(EVAL_SYSTEM_PROMPT, userPrompt).trim();
+        String response = llmPort.complete(EVAL_SYSTEM_PROMPT, userPrompt).content().trim();
         try {
             return Math.max(0.0, Math.min(1.0, Double.parseDouble(response)));
         } catch (NumberFormatException e) {

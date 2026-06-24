@@ -79,6 +79,8 @@ Once started, the app is available at:
 | Testing | JUnit 5, Testcontainers, Mockito |
 | CI/CD | GitHub Actions |
 | Dev tooling | Make (local lifecycle) |
+| Security | Spring Security (API key auth) |
+| Resilience | Resilience4j (circuit breaker, retry, rate limiter) |
 
 ---
 
@@ -95,7 +97,7 @@ Once started, the app is available at:
 | 7 | Conversation history — chat sessions, multi-turn context | ✅ Complete |
 | 8 | AWS deployment — Terraform, ECS Fargate, RDS, Secrets Manager, CD pipeline | ✅ Complete |
 | 9 | Observability — Micrometer metrics, Grafana dashboards, LLM-as-a-judge evaluation | ✅ Complete |
-| 10 | Production hardening — JWT auth, rate limiting, circuit breakers, resilience | Planned |
+| 10 | Production hardening — API key auth, circuit breakers, rate limiting, semantic chunking, history-aware retrieval | ✅ Complete |
 
 ---
 

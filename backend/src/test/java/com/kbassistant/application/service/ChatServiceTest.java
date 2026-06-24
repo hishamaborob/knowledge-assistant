@@ -26,13 +26,17 @@ class ChatServiceTest {
     @Mock ChatSessionRepository chatSessionRepository;
     @Mock ChatMessageRepository chatMessageRepository;
     @Mock QueryService queryService;
+    @Mock QuestionCondenser questionCondenser;
 
     ChatService chatService;
 
     @BeforeEach
     void setUp() {
-        chatService = new ChatService(chatSessionRepository, chatMessageRepository, queryService, 10);
+        chatService = new ChatService(chatSessionRepository, chatMessageRepository,
+                queryService, questionCondenser, 10);
         lenient().when(chatMessageRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // By default, condenser returns the original question unchanged
+        lenient().when(questionCondenser.condense(anyString(), anyList())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
@@ -64,7 +68,7 @@ class ChatServiceTest {
         when(chatSessionRepository.findById(session.id())).thenReturn(Optional.of(session));
         when(chatMessageRepository.findBySessionId(session.id())).thenReturn(List.of());
         when(queryService.query(eq("hi"), anyList(), eq(List.of())))
-                .thenReturn(new QueryResult("hello!", List.of(), 10L));
+                .thenReturn(new QueryResult("hello!", List.of(), 10L, 100, 50, "gpt-4o"));
 
         QueryResult result = chatService.sendMessage(session.id(), "hi", List.of());
 
@@ -80,7 +84,7 @@ class ChatServiceTest {
 
         SourceChunk source = new SourceChunk(DocumentId.generate(), "Guide", "snippet...", 0.9);
         when(queryService.query(anyString(), anyList(), anyList()))
-                .thenReturn(new QueryResult("the answer", List.of(source), 20L));
+                .thenReturn(new QueryResult("the answer", List.of(source), 20L, 100, 50, "gpt-4o"));
 
         chatService.sendMessage(session.id(), "question", List.of());
 
@@ -93,11 +97,15 @@ class ChatServiceTest {
         assertThat(saved.get(1).role()).isEqualTo(ChatRole.ASSISTANT);
         assertThat(saved.get(1).content()).isEqualTo("the answer");
         assertThat(saved.get(1).citations()).containsExactly(source);
+        assertThat(saved.get(1).promptTokens()).isEqualTo(100);
+        assertThat(saved.get(1).completionTokens()).isEqualTo(50);
+        assertThat(saved.get(1).modelUsed()).isEqualTo("gpt-4o");
     }
 
     @Test
     void sendMessage_windowsHistoryToConfiguredSize() {
-        chatService = new ChatService(chatSessionRepository, chatMessageRepository, queryService, 2);
+        chatService = new ChatService(chatSessionRepository, chatMessageRepository,
+                queryService, questionCondenser, 2);
 
         ChatSession session = ChatSession.create("user-1");
         when(chatSessionRepository.findById(session.id())).thenReturn(Optional.of(session));
@@ -110,8 +118,9 @@ class ChatServiceTest {
                     "turn-" + i, List.of(), null, null, null, Instant.now()));
         }
         when(chatMessageRepository.findBySessionId(session.id())).thenReturn(priorMessages);
+        when(questionCondenser.condense(anyString(), anyList())).thenAnswer(inv -> inv.getArgument(0));
         when(queryService.query(anyString(), anyList(), anyList()))
-                .thenReturn(new QueryResult("answer", List.of(), 5L));
+                .thenReturn(new QueryResult("answer", List.of(), 5L, 0, 0, "none"));
 
         chatService.sendMessage(session.id(), "new question", List.of());
 

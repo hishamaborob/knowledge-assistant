@@ -339,27 +339,27 @@ Two retrieval issues surfaced during manual testing that are not code bugs but i
 
 ---
 
-## Phase 10 — Production Hardening
+## Phase 10 — Production Hardening ✅ Complete
 
-**Goal:** Security, resilience, performance optimization, and operational runbook.
+**Goal:** Security, resilience, and RAG quality improvements that make the system production-ready.
 
 ### Deliverables
-- JWT authentication + API key support
-- Rate limiting (token bucket per API key)
-- Circuit breaker for LLM providers (Resilience4j)
-- Semantic chunking implementation
-- Hybrid search (vector + full-text)
-- Reranking integration (Cohere)
-- Connection pool tuning
-- Production runbook
-- **Similarity threshold per embedding provider** — make `app.similarity.threshold` provider-aware; lower default for `nomic-embed-text` (~0.5 vs 0.75 for OpenAI), with guidance documented in `application.yml` (carry-forward from Phase 7 known limitations)
-- **History-aware retrieval / condense-question** — before embedding a follow-up question, prepend recent turns or invoke an LLM rewrite so pronouns and implicit references resolve to concrete terms before the vector search runs (carry-forward from Phase 7 known limitations)
+- `LlmResponse` domain record — richer LLM return type; token usage now populates `ChatMessage` (carry-forward from Phase 7)
+- Resilience4j `@CircuitBreaker` + `@Retry` on all LLM adapters — graceful degraded response on provider outage
+- Resilience4j `@RateLimiter` on query + chat endpoints — 429 with `retryAfter` property
+- API key authentication via Spring Security `ApiKeyAuthFilter` — dev-mode pass-through when `api-keys` empty
+- `QuestionCondenser` — rewrites follow-up questions to standalone form before embedding (carry-forward from Phase 7)
+- Provider-aware similarity threshold — `threshold-ollama: 0.5` for nomic-embed-text (carry-forward from Phase 7)
+- `ChunkingStrategy` port + `SemanticChunker` — sentence embedding boundary detection, selected by `app.chunking.strategy`
+- `docs/PHASE_10_RUNBOOK.md` — operational runbook (deploy, scaling, failures, backup/restore, secret rotation, teardown)
 
-### Claude Code Prompt
-```
-We are in Phase 10. Implement Resilience4j circuit breaker for LlmPort. 
-Requirements: open after 5 failures in 10s, half-open after 30s, 
-fallback returns a degraded response explaining the LLM is temporarily unavailable 
-(do not propagate the error to the user). Show the configuration and explain 
-circuit breaker state transitions and why we need this for an external LLM API dependency.
-```
+### Deferred
+- Hybrid search (vector + BM25) — own phase
+- Reranking (Cohere) — own phase
+- JWT with external IdP — upgrade path documented in runbook; API keys are correct for this access pattern now
+
+### Key Decisions (see `docs/PHASE_10_PLAN.md` and `docs/adr/ADR-006-authentication.md`)
+- API keys over JWT: no UI, no user sessions, no IdP infrastructure needed; rotation via comma-separated list
+- Circuit breaker on adapters (not a wrapper): Resilience4j AOP requires Spring bean method calls; adapters are the right boundary
+- `LlmPort` breaking change now: better to do it while codebase is small; deferred cost grows with each new caller
+- `SemanticChunker` in domain/service: depends only on `EmbeddingPort` (a domain interface); zero Spring annotations

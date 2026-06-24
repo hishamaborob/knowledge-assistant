@@ -19,15 +19,18 @@ public class ChatService {
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final QueryService queryService;
+    private final QuestionCondenser questionCondenser;
     private final int historyWindow;
 
     public ChatService(ChatSessionRepository chatSessionRepository,
                        ChatMessageRepository chatMessageRepository,
                        QueryService queryService,
+                       QuestionCondenser questionCondenser,
                        @Value("${app.chat.history-window:10}") int historyWindow) {
         this.chatSessionRepository = chatSessionRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.queryService = queryService;
+        this.questionCondenser = questionCondenser;
         this.historyWindow = historyWindow;
     }
 
@@ -45,10 +48,12 @@ public class ChatService {
 
         chatMessageRepository.save(ChatMessage.create(session.id(), ChatRole.USER, question, List.of()));
 
-        QueryResult result = queryService.query(question, documentFilter, history);
+        String questionForRetrieval = questionCondenser.condense(question, history);
+        QueryResult result = queryService.query(questionForRetrieval, documentFilter, history);
 
         chatMessageRepository.save(
-                ChatMessage.create(session.id(), ChatRole.ASSISTANT, result.answer(), result.sources()));
+                ChatMessage.create(session.id(), ChatRole.ASSISTANT, result.answer(), result.sources(),
+                        result.promptTokens(), result.completionTokens(), result.modelUsed()));
 
         return result;
     }

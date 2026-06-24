@@ -409,17 +409,38 @@ erDiagram
 
 ```
 Request → TLS Termination (ALB)
-        → JwtAuthFilter (RS256 JWT validation)
-        → RateLimitFilter (per API key, token bucket)
+        → ApiKeyAuthFilter (X-API-Key header validation)
+        │     Dev mode: api-keys empty → pass-through (no auth required)
+        │     Prod mode: validates against app.security.api-keys from Secrets Manager
+        → RateLimiter (Resilience4j @RateLimiter — 20 req/10s on /queries and /sessions/*/messages)
         → Controller
         → Application Layer
         → Infrastructure (credentials from Secrets Manager, never env vars in prod)
 ```
 
-- **JWT:** RS256, short-lived (15 min access token), supports API key as alternative
-- **Secrets:** Never hardcode. Dev: `application-local.yml` (gitignored). Prod: Secrets Manager via Spring Cloud AWS
-- **S3:** Pre-signed URLs for download, never expose raw S3 URLs
-- **DB:** RDS in private subnet, no public access, Security Group allows only ECS tasks
+- **API keys:** `X-API-Key` header; comma-separated list in `app.security.api-keys` supports zero-downtime rotation. Upgrade path to JWT documented in `docs/PHASE_10_RUNBOOK.md`.
+- **Secrets:** Never hardcode. Dev: `application-local.yml` (gitignored) + LocalStack SM. Prod: Secrets Manager via Spring Cloud AWS (`spring.config.import: aws-secretsmanager:/knowledge-assistant/prod`).
+- **S3:** Documents stored server-side encrypted; app accesses via task role (no credentials in app code).
+- **DB:** RDS in private subnet, no public access; Security Group allows only ECS tasks on port 5432.
+
+### Resilience
+
+```
+LlmPort.complete()
+  → @CircuitBreaker(name="llm")  — opens at 50% failure rate in 10s window
+  │     fallback: returns LlmResponse("The AI service is temporarily unavailable...", 0, 0, "unavailable")
+  → @Retry(name="llm")           — 3 attempts, exponential backoff 2s/4s
+  │     only retries: ResourceAccessException, ConnectException, IOException
+  → actual LLM HTTP call (OpenAI / Anthropic / Ollama)
+```
+
+Circuit breaker state transitions:
+- **CLOSED** → **OPEN**: 50% failure rate over minimum 5 calls in a 10s sliding window
+- **OPEN** → **HALF_OPEN**: automatic after 30s; probes with 3 calls
+- **HALF_OPEN** → **CLOSED**: all 3 probe calls succeed
+- **HALF_OPEN** → **OPEN**: any probe call fails
+
+This pattern ensures LLM provider outages degrade gracefully (users see a clear message, not a 500) and recovers automatically without operator intervention.
 
 ---
 

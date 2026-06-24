@@ -144,16 +144,24 @@ app:
       bucket-name: ${S3_BUCKET_NAME:knowledge-assistant-docs-local}
       region: ${AWS_REGION:us-east-1}
   chunking:
+    strategy: ${CHUNKING_STRATEGY:fixed}  # fixed | semantic
     chunk-size: ${CHUNK_SIZE:512}
     overlap: ${CHUNK_OVERLAP:64}
+    semantic:
+      split-threshold: 0.7  # Cosine similarity below this marks a chunk boundary
   similarity:
     threshold: 0.75  # Minimum cosine similarity score to include a chunk. Tune with eval.
+    threshold-ollama: 0.5  # nomic-embed-text scores lower overall than OpenAI embeddings
     top-k: 10
   chat:
     history-window: 10  # Max prior messages (5 exchanges) injected into the LLM prompt
   evaluation:
     enabled: true
     sample-rate: 0.2  # Evaluate 20% of queries to bound LLM API cost
+  question-condenser:
+    enabled: true  # Set to false to disable for stateless /queries (has no effect there)
+  security:
+    api-keys: ${API_KEYS:}  # Empty = dev mode (no auth). Prod: set via Secrets Manager.
 
 # SpringDoc: disable in production via app.springdoc.enabled=false
 springdoc:
@@ -162,6 +170,38 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     operations-sorter: method
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      llm:
+        sliding-window-type: time-based
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 5
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+  retry:
+    instances:
+      llm:
+        max-attempts: 3
+        wait-duration: 2s
+        exponential-backoff-multiplier: 2.0
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.net.ConnectException
+          - java.io.IOException
+  ratelimiter:
+    instances:
+      queryApi:
+        limit-for-period: 20
+        limit-refresh-period: 10s
+        timeout-duration: 0s
+      chatApi:
+        limit-for-period: 20
+        limit-refresh-period: 10s
+        timeout-duration: 0s
 
 logging:
   pattern:

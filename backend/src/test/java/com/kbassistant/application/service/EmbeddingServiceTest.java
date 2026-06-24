@@ -7,6 +7,7 @@ import com.kbassistant.domain.model.MimeType;
 import com.kbassistant.domain.port.out.DocumentRepository;
 import com.kbassistant.domain.port.out.EmbeddingPort;
 import com.kbassistant.domain.port.out.VectorStorePort;
+import com.kbassistant.domain.service.ChunkingStrategy;
 import com.kbassistant.domain.service.FixedSizeChunker;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,7 @@ class EmbeddingServiceTest {
     @Mock VectorStorePort vectorStorePort;
 
     // Real chunker: chunkSize=5 words, overlap=1
-    FixedSizeChunker chunker = new FixedSizeChunker(5, 1);
+    ChunkingStrategy chunker = new FixedSizeChunker(5, 1);
     SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     EmbeddingService embeddingService;
 

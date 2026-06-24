@@ -2,6 +2,7 @@ package com.kbassistant.infrastructure.llm;
 
 import com.kbassistant.domain.model.ChatRole;
 import com.kbassistant.domain.model.ChatTurn;
+import com.kbassistant.domain.model.LlmResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,16 +31,17 @@ class OllamaLlmAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new OllamaLlmAdapter(chatModel);
+        adapter = new OllamaLlmAdapter(chatModel, "llama3.2");
     }
 
     @Test
     void complete_returnsLlmContent() {
         doReturn(responseWith("The answer is 42.")).when(chatModel).call((Prompt) any());
 
-        String result = adapter.complete("You are a helpful assistant.", "What is the answer?");
+        LlmResponse result = adapter.complete("You are a helpful assistant.", "What is the answer?");
 
-        assertThat(result).isEqualTo("The answer is 42.");
+        assertThat(result.content()).isEqualTo("The answer is 42.");
+        assertThat(result.modelUsed()).isEqualTo("llama3.2");
     }
 
     @Test
@@ -54,12 +56,12 @@ class OllamaLlmAdapterTest {
     }
 
     @Test
-    void complete_emptyResponse_returnsEmptyString() {
+    void complete_emptyResponse_returnsEmptyContent() {
         doReturn(responseWith("")).when(chatModel).call((Prompt) any());
 
-        String result = adapter.complete("sys", "user");
+        LlmResponse result = adapter.complete("sys", "user");
 
-        assertThat(result).isEmpty();
+        assertThat(result.content()).isEmpty();
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.kbassistant.domain.model.QueryResult;
 import com.kbassistant.domain.model.SourceChunk;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
@@ -21,7 +22,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(QueryController.class)
+@WebMvcTest(value = QueryController.class, excludeAutoConfiguration = SecurityAutoConfiguration.class)
 class QueryControllerTest {
 
     @Autowired MockMvc mockMvc;
@@ -30,7 +31,7 @@ class QueryControllerTest {
 
     @Test
     void postQuery_validRequest_returns200WithAnswer() throws Exception {
-        QueryResult result = new QueryResult("Spring AI is a framework.", List.of(), 150L);
+        QueryResult result = new QueryResult("Spring AI is a framework.", List.of(), 150L, 0, 0, "none");
         when(queryService.query(eq("What is Spring AI?"), anyList())).thenReturn(result);
 
         mockMvc.perform(post("/queries")
@@ -47,7 +48,7 @@ class QueryControllerTest {
     void postQuery_withSources_returnsCitations() throws Exception {
         DocumentId docId = DocumentId.generate();
         SourceChunk source = new SourceChunk(docId, "Guide", "snippet...", 0.91);
-        QueryResult result = new QueryResult("The answer.", List.of(source), 200L);
+        QueryResult result = new QueryResult("The answer.", List.of(source), 200L, 0, 0, "none");
         when(queryService.query(anyString(), anyList())).thenReturn(result);
 
         mockMvc.perform(post("/queries")
@@ -80,7 +81,7 @@ class QueryControllerTest {
     @Test
     void postQuery_withDocumentFilter_passesIdsToService() throws Exception {
         String docId = UUID.randomUUID().toString();
-        QueryResult result = new QueryResult("answer", List.of(), 100L);
+        QueryResult result = new QueryResult("answer", List.of(), 100L, 0, 0, "none");
         when(queryService.query(anyString(), argThat(ids ->
                 ids.size() == 1 && ids.get(0).value().toString().equals(docId))))
                 .thenReturn(result);

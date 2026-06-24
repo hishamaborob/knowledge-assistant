@@ -18,6 +18,11 @@ springdoc:
   api-docs:
     enabled: false
 
+# Security note: API_KEYS must be added to the Secrets Manager secret
+# /knowledge-assistant/prod before going live.
+# Format: comma-separated keys, e.g. "key1,key2,key3"
+# When empty, all requests are permitted (dev mode — NOT safe for production).
+
 logging:
   structured:
     format:

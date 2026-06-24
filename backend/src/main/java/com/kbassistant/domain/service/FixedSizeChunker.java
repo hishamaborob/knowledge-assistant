@@ -14,7 +14,7 @@ import java.util.List;
  * Wired as a Spring bean by ChunkingConfig in infrastructure — this class has
  * zero framework dependencies and can be unit-tested without a Spring context.
  */
-public class FixedSizeChunker {
+public class FixedSizeChunker implements ChunkingStrategy {
 
     private final int chunkSize;
     private final int overlap;

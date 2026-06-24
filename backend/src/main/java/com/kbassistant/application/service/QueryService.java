@@ -44,7 +44,9 @@ public class QueryService {
     private final DocumentRepository documentRepository;
     private final EvaluationService evaluationService;
     private final double similarityThreshold;
+    private final double similarityThresholdOllama;
     private final int topK;
+    private final String embeddingProvider;
     private final MeterRegistry meterRegistry;
     private final Timer queryTimer;
     private final Timer llmTimer;
@@ -57,14 +59,18 @@ public class QueryService {
                         @Value("${app.similarity.threshold:0.75}") double similarityThreshold,
                         @Value("${app.similarity.top-k:10}") int topK,
                         @Value("${app.llm.provider:openai}") String llmProvider,
-                        MeterRegistry meterRegistry) {
+                        MeterRegistry meterRegistry,
+                        @Value("${app.similarity.threshold-ollama:0.5}") double similarityThresholdOllama,
+                        @Value("${app.embedding.provider:openai}") String embeddingProvider) {
         this.embeddingPort = embeddingPort;
         this.vectorStorePort = vectorStorePort;
         this.llmPort = llmPort;
         this.documentRepository = documentRepository;
         this.evaluationService = evaluationService;
         this.similarityThreshold = similarityThreshold;
+        this.similarityThresholdOllama = similarityThresholdOllama;
         this.topK = topK;
+        this.embeddingProvider = embeddingProvider;
         this.meterRegistry = meterRegistry;
         this.queryTimer = Timer.builder("chat.query.duration")
                 .description("End-to-end RAG query duration including embed, search, LLM, and source build")
@@ -88,11 +94,12 @@ public class QueryService {
         // 1. Embed the question with the same model used during ingestion
         float[] queryVector = embeddingPort.embed(List.of(question)).get(0);
 
-        // 2. Similarity search
+        // 2. Similarity search — use provider-specific threshold
+        double threshold = "ollama".equals(embeddingProvider) ? similarityThresholdOllama : similarityThreshold;
         SimilaritySearchRequest.Builder builder = SimilaritySearchRequest.builder()
                 .queryVector(queryVector)
                 .topK(topK)
-                .similarityThreshold(similarityThreshold);
+                .similarityThreshold(threshold);
 
         if (documentFilter != null && !documentFilter.isEmpty()) {
             builder.documentIds(documentFilter);
@@ -110,7 +117,8 @@ public class QueryService {
             return new QueryResult(
                     "No relevant documents found for this question.",
                     List.of(),
-                    System.currentTimeMillis() - start
+                    System.currentTimeMillis() - start,
+                    0, 0, "none"
             );
         }
 
@@ -122,18 +130,25 @@ public class QueryService {
 
         // 6. Call LLM, injecting prior conversation turns (empty for stateless /queries calls)
         Timer.Sample llmSample = Timer.start(meterRegistry);
-        String answer = llmPort.complete(SYSTEM_PROMPT, conversationHistory, buildUserPrompt(question, context));
+        LlmResponse llmResponse = llmPort.complete(SYSTEM_PROMPT, conversationHistory, buildUserPrompt(question, context));
         llmSample.stop(llmTimer);
-        log.info("LLM answer generated ({} chars)", answer.length());
+        log.info("LLM answer generated ({} chars)", llmResponse.content().length());
 
         // 7. Build source citations for the response
         List<SourceChunk> sources = buildSources(results, docNames);
 
         // 8. Async LLM-as-a-judge evaluation (fire-and-forget, non-critical)
-        evaluationService.evaluate(question, context, answer);
+        evaluationService.evaluate(question, context, llmResponse.content());
 
         querySample.stop(queryTimer);
-        return new QueryResult(answer, sources, System.currentTimeMillis() - start);
+        return new QueryResult(
+                llmResponse.content(),
+                sources,
+                System.currentTimeMillis() - start,
+                llmResponse.promptTokens(),
+                llmResponse.completionTokens(),
+                llmResponse.modelUsed()
+        );
     }
 
     private Map<DocumentId, String> loadDocumentNames(List<ScoredChunk> results) {

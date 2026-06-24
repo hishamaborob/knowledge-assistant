@@ -5,6 +5,7 @@ import com.kbassistant.api.dto.QueryResponse;
 import com.kbassistant.application.service.QueryService;
 import com.kbassistant.domain.model.DocumentId;
 import com.kbassistant.domain.model.QueryResult;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -25,6 +26,7 @@ public class QueryController {
     }
 
     @PostMapping
+    @RateLimiter(name = "queryApi")
     @Operation(summary = "Ask a question", description =
             "Embeds the question, searches for relevant chunks, and generates a grounded answer.")
     public QueryResponse query(@RequestBody @Valid QueryRequest request) {

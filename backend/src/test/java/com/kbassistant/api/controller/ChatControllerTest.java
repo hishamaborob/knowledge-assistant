@@ -8,6 +8,7 @@ import com.kbassistant.domain.exception.ChatSessionNotFoundException;
 import com.kbassistant.domain.model.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
@@ -20,7 +21,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(ChatController.class)
+@WebMvcTest(value = ChatController.class, excludeAutoConfiguration = SecurityAutoConfiguration.class)
 class ChatControllerTest {
 
     @Autowired MockMvc mockMvc;
@@ -51,7 +52,7 @@ class ChatControllerTest {
     @Test
     void sendMessage_validRequest_returns200WithAnswer() throws Exception {
         ChatSessionId sessionId = ChatSessionId.generate();
-        QueryResult result = new QueryResult("the answer", List.of(), 50L);
+        QueryResult result = new QueryResult("the answer", List.of(), 50L, 0, 0, "none");
         when(chatService.sendMessage(eq(sessionId), eq("question"), anyList())).thenReturn(result);
 
         mockMvc.perform(post("/sessions/" + sessionId + "/messages")

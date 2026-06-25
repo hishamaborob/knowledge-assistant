@@ -233,7 +233,7 @@ Explain why citations come from the retrieval step not LLM output parsing.
 **Scope note:** Gemini adapter, streaming responses, and token usage tracking were planned but deferred — see Architecture Decisions in `docs/PHASE_6_PLAN.md` for why (Vertex AI GCP setup overhead, streaming requiring a separate SseEmitter/WebFlux design decision, token tracking better scoped with Micrometer in the Observability phase).
 
 ### Deliverables
-- `AnthropicLlmAdapter` — Claude claude-sonnet-4-6 via Spring AI
+- `AnthropicLlmAdapter` — claude-sonnet-4-6 via Spring AI
 - `app.llm.provider=anthropic` selection in config (already unblocked — base `application.yml` never excluded `AnthropicAutoConfiguration`)
 - Improved system prompt: fixed quotable refusal string, multi-source citation format `[1][3]`, no-speculate instruction separated from citation rules
 

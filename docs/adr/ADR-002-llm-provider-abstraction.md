@@ -5,7 +5,7 @@
 
 ## Context
 
-We want to support Ollama (local), OpenAI, Anthropic Claude, and Google Gemini interchangeably.
+We want to support Ollama (local), OpenAI, and Anthropic Claude interchangeably. Gemini was originally planned but not implemented — the port pattern makes adding it a single adapter class when needed.
 Spring AI provides `ChatModel` and `EmbeddingModel` abstractions, but they are framework types.
 Importing Spring AI into the domain layer would violate hexagonal boundaries.
 
@@ -21,7 +21,7 @@ Define two domain ports:
 Each provider adapter wraps Spring AI's `ChatModel`/`EmbeddingModel` and implements these ports.
 Provider selection via `@ConditionalOnProperty(name = "app.llm.provider", havingValue = "ollama")`.
 LLM and embedding providers are switched independently:
-- `app.llm.provider=ollama|openai|anthropic|gemini`
+- `app.llm.provider=ollama|openai|anthropic`
 - `app.embedding.provider=ollama|openai`
 
 **Embedding note:** Only one embedding provider is active at a time. The model used for ingestion

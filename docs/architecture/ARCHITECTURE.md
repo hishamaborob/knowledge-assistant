@@ -37,9 +37,8 @@ C4Context
 
     System(ka, "Knowledge Assistant", "RAG application: ingest documents, answer questions with citations")
 
-    System_Ext(openai, "OpenAI API", "LLM + Embedding provider (gpt-4o, text-embedding-3-large)")
-    System_Ext(anthropic, "Anthropic API", "LLM provider (claude-3-5-sonnet)")
-    System_Ext(gemini, "Google Gemini API", "LLM provider (gemini-1.5-pro)")
+    System_Ext(openai, "OpenAI API", "LLM + Embedding provider (gpt-4o, text-embedding-3-small)")
+    System_Ext(anthropic, "Anthropic API", "LLM provider (claude-sonnet-4-6)")
     System_Ext(s3, "AWS S3", "Durable document storage")
     System_Ext(cloudwatch, "AWS CloudWatch", "Log aggregation and alerting")
     System_Ext(secrets, "AWS Secrets Manager", "API keys, DB credentials")
@@ -48,7 +47,6 @@ C4Context
     Rel(admin, ka, "Monitors, configures", "AWS Console / Grafana")
     Rel(ka, openai, "Generates embeddings + LLM completions", "HTTPS")
     Rel(ka, anthropic, "LLM completions", "HTTPS")
-    Rel(ka, gemini, "LLM completions", "HTTPS")
     Rel(ka, s3, "Store and retrieve raw documents", "AWS SDK")
     Rel(ka, cloudwatch, "Emit logs and metrics", "CloudWatch agent")
     Rel(ka, secrets, "Read credentials at startup", "AWS SDK")
@@ -73,10 +71,10 @@ C4Container
     }
 
     System_Ext(s3, "AWS S3", "Raw document storage")
-    System_Ext(llm, "LLM Providers", "OpenAI / Anthropic / Gemini")
+    System_Ext(llm, "LLM Providers", "OpenAI / Anthropic / Ollama")
     System_Ext(prom, "Prometheus + Grafana", "Metrics and dashboards")
 
-    Rel(user, api, "REST calls", "HTTPS / JWT")
+    Rel(user, api, "REST calls", "HTTPS / X-API-Key")
     Rel(api, ingestion, "Triggers async ingestion job", "Internal / ApplicationEvent")
     Rel(api, rag, "Delegates chat queries", "Internal service call")
     Rel(ingestion, s3, "Read uploaded files", "AWS SDK")
@@ -98,15 +96,18 @@ C4Component
     Container_Boundary(api_layer, "API Layer (Adapters IN)") {
         Component(doc_ctrl, "DocumentController", "REST Controller", "Document upload, list, delete endpoints")
         Component(query_ctrl, "QueryController", "REST Controller", "POST /queries endpoint")
+        Component(chat_ctrl, "ChatController", "REST Controller", "POST /sessions, POST /sessions/{id}/messages, GET /sessions/{id}/messages")
         Component(health_ctrl, "HealthController", "Actuator / REST", "GET /health")
-        Component(auth_filter, "JwtAuthFilter", "Servlet Filter", "Validates Bearer tokens — Phase 10")
-        Component(rate_limiter, "RateLimitFilter", "Servlet Filter", "Token-bucket rate limiting — Phase 10")
+        Component(auth_filter, "ApiKeyAuthFilter", "Servlet Filter", "Validates X-API-Key header; dev-mode pass-through when api-keys empty")
     }
 
     Container_Boundary(app_layer, "Application Layer (Use Cases)") {
         Component(doc_svc, "DocumentService", "Use Case", "Orchestrates upload → S3 store → ingestion trigger")
         Component(ingest_svc, "EmbeddingService", "Use Case", "Chunk → embed → persist pipeline")
-        Component(query_svc, "QueryService", "Use Case", "Embed query → similarity search → LLM → source citations")
+        Component(query_svc, "QueryService", "Use Case", "Embed query → similarity search → LLM → source citations; Resilience4j @RateLimiter")
+        Component(chat_svc, "ChatService", "Use Case", "Session lifecycle, history windowing, message persistence")
+        Component(eval_svc, "EvaluationService", "Use Case", "Async LLM-as-a-judge — faithfulness + relevance scores, 20% sampled")
+        Component(condenser, "QuestionCondenser", "Application Service", "Rewrites follow-up questions to standalone form before embedding")
     }
 
     Container_Boundary(domain_layer, "Domain Layer (Pure Java)") {
@@ -124,8 +125,7 @@ C4Component
     Container_Boundary(infra_layer, "Infrastructure Layer (Adapters OUT)") {
         Component(ollama_llm, "OllamaLlmAdapter", "Spring AI", "Implements LlmPort via Ollama llama3.2 (local)")
         Component(openai_llm, "OpenAiLlmAdapter", "Spring AI", "Implements LlmPort via OpenAI gpt-4o (prod)")
-        Component(anthropic_adapter, "AnthropicLlmAdapter", "Spring AI", "Implements LlmPort via Anthropic — Phase 6")
-        Component(gemini_adapter, "GeminiLlmAdapter", "Spring AI", "Implements LlmPort via Gemini — Phase 6")
+        Component(anthropic_adapter, "AnthropicLlmAdapter", "Spring AI", "Implements LlmPort via Anthropic claude-sonnet-4-6")
         Component(ollama_embed, "OllamaEmbeddingAdapter", "Spring AI", "Implements EmbeddingPort via nomic-embed-text (768 dims)")
         Component(openai_embed, "OpenAiEmbeddingAdapter", "Spring AI", "Implements EmbeddingPort via text-embedding-3-small (768 dims)")
         Component(pgvector_adapter, "PgVectorAdapter", "Spring Data JPA", "Implements VectorStorePort via pgvector cosine search")
@@ -138,20 +138,23 @@ C4Component
 
     Rel(doc_ctrl, doc_svc, "calls")
     Rel(query_ctrl, query_svc, "calls")
+    Rel(chat_ctrl, chat_svc, "calls")
     Rel(doc_svc, ingest_svc, "triggers async")
     Rel(doc_svc, doc_store_port, "store file")
     Rel(ingest_svc, chunk_strategy, "chunk text")
     Rel(ingest_svc, embedding_port, "generate embeddings")
     Rel(ingest_svc, vector_store_port, "persist chunks+vectors")
+    Rel(query_svc, condenser, "condense follow-up question")
     Rel(query_svc, embedding_port, "embed question")
     Rel(query_svc, vector_store_port, "similarity search")
     Rel(query_svc, llm_port, "complete prompt")
+    Rel(query_svc, eval_svc, "evaluate async")
+    Rel(chat_svc, query_svc, "delegates RAG")
     Rel(s3_adapter, doc_store_port, "implements")
     Rel(pgvector_adapter, vector_store_port, "implements")
     Rel(ollama_llm, llm_port, "implements")
     Rel(openai_llm, llm_port, "implements")
     Rel(anthropic_adapter, llm_port, "implements")
-    Rel(gemini_adapter, llm_port, "implements")
     Rel(ollama_embed, embedding_port, "implements")
     Rel(openai_embed, embedding_port, "implements")
 ```
@@ -224,7 +227,8 @@ sequenceDiagram
     API->>QuerySvc: query(question, documentFilter)
     QuerySvc->>EmbedPort: embed([question])
     EmbedPort-->>QuerySvc: questionVector (768-dim)
-    QuerySvc->>VecStore: similaritySearch(vector, topK=10, threshold=0.75, filter)
+    Note over QuerySvc: threshold: 0.75 default, 0.5 for Ollama (nomic-embed-text scores lower)
+    QuerySvc->>VecStore: similaritySearch(vector, topK=10, threshold, filter)
     VecStore->>DB: SELECT ... ORDER BY embedding <=> $1 LIMIT $2
     DB-->>VecStore: List<ScoredChunk>
     VecStore-->>QuerySvc: List<ScoredChunk>
@@ -331,11 +335,10 @@ The `LlmPort` domain interface decouples the application from any specific provi
 LlmPort
   └── OllamaLlmAdapter     (Spring AI Ollama — llama3.2 local, app.llm.provider=ollama)
   └── OpenAiLlmAdapter     (Spring AI OpenAI — gpt-4o prod, app.llm.provider=openai)
-  └── AnthropicLlmAdapter  (Spring AI Anthropic — claude-sonnet-4-6, Phase 6)
-  └── GeminiLlmAdapter     (Spring AI Google Vertex/Gemini, Phase 6)
+  └── AnthropicLlmAdapter  (Spring AI Anthropic — claude-sonnet-4-6, app.llm.provider=anthropic)
 ```
 
-Provider selection is driven by `app.llm.provider=ollama|openai|anthropic|gemini` in application config.
+Provider selection is driven by `app.llm.provider=ollama|openai|anthropic` in application config.
 Spring `@ConditionalOnProperty` activates the correct `@Bean`.
 
 `EmbeddingPort` follows the same pattern independently — LLM and embedding providers are configured
@@ -480,7 +483,6 @@ graph TB
     subgraph External["External LLM APIs"]
         OAI[OpenAI API]
         ANT[Anthropic API]
-        GEM[Google Gemini API]
     end
 
     User --> ALB
@@ -491,7 +493,6 @@ graph TB
     Task --> CW
     Task --> OAI
     Task --> ANT
-    Task --> GEM
     Task --> NGW
     GH --> ECR
     ECR --> Task
@@ -526,6 +527,7 @@ ECS task starts
   │           DB_PASSWORD      → resolves ${DB_PASSWORD:ka_password} in application.yml
   │           OPENAI_API_KEY   → resolves ${OPENAI_API_KEY:}
   │           ANTHROPIC_API_KEY → resolves ${ANTHROPIC_API_KEY:}
+  │           API_KEYS         → resolves ${API_KEYS:} → app.security.api-keys
   │
   ├─ DB_URL set as plaintext env var in ECS task def (not sensitive: just hostname + db name)
   │

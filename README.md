@@ -12,7 +12,7 @@ See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for f
 
 **Key design principles:**
 - Hexagonal Architecture (Ports & Adapters) — domain has zero framework dependencies
-- Provider-agnostic LLM layer — swap OpenAI / Anthropic / Gemini via config
+- Provider-agnostic LLM layer — swap OpenAI / Anthropic / Ollama via config
 - Async ingestion pipeline — uploads return immediately; processing is event-driven
 - Every answer includes traceable citations — no hallucination-only responses
 

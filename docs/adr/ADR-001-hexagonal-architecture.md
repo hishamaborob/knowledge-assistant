@@ -33,7 +33,7 @@ Ports (interfaces) live in `domain/port/`. Adapters (implementations) live in `i
 **Bad:**
 - More files and indirection than a layered architecture
 - Junior engineers need orientation — the "which layer does this go in?" question comes up frequently
-- DTOs at boundaries create mapping boilerplate (mitigated with MapStruct in Phase 10)
+- DTOs at boundaries create mapping boilerplate; mitigated by keeping records flat (no deep object graphs)
 
 ## Alternatives Considered
 

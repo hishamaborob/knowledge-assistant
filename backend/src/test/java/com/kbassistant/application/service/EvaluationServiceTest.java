@@ -79,6 +79,59 @@ class EvaluationServiceTest {
         assertThat(faithfulness.totalAmount()).isCloseTo(0.5, within(0.001));
     }
 
+    // 5. evaluate_contextTruncatedToFourThousandChars — long context must not overflow judge prompt
+    @Test
+    void evaluate_longContext_contextTruncatedBeforeJudgeCall() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        EvaluationService service = new EvaluationService(llmPort, true, 1.0, "openai", meterRegistry);
+
+        String longContext = "x".repeat(5000);
+        when(llmPort.complete(anyString(), anyString()))
+                .thenReturn(new LlmResponse("0.8", 10, 5, "gpt-4o"));
+
+        service.evaluate("question", longContext, "answer");
+
+        // Faithfulness prompt replaces {context} — verify the prompt sent to the LLM does not contain
+        // the full 5000-char context (it must be truncated to 4000 + ellipsis)
+        org.mockito.ArgumentCaptor<String> userPromptCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(llmPort, org.mockito.Mockito.atLeastOnce()).complete(anyString(), userPromptCaptor.capture());
+        String faithfulnessPrompt = userPromptCaptor.getAllValues().get(0);
+        assertThat(faithfulnessPrompt).doesNotContain("x".repeat(5000));
+        assertThat(faithfulnessPrompt.length()).isLessThan(5000);
+    }
+
+    // 6. evaluate_scoreAboveOne_clampedToOne
+    @Test
+    void evaluate_scoreAboveOne_clampedToOne() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        EvaluationService service = new EvaluationService(llmPort, true, 1.0, "openai", meterRegistry);
+
+        when(llmPort.complete(anyString(), anyString()))
+                .thenReturn(new LlmResponse("1.5", 10, 5, "gpt-4o"))
+                .thenReturn(new LlmResponse("2.0", 10, 5, "gpt-4o"));
+
+        service.evaluate("question", "context", "answer");
+
+        DistributionSummary faithfulness = meterRegistry.summary("rag.evaluation.faithfulness", "provider", "openai");
+        assertThat(faithfulness.totalAmount()).isCloseTo(1.0, within(0.001));
+    }
+
+    // 7. evaluate_scoreBelowZero_clampedToZero
+    @Test
+    void evaluate_scoreBelowZero_clampedToZero() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        EvaluationService service = new EvaluationService(llmPort, true, 1.0, "openai", meterRegistry);
+
+        when(llmPort.complete(anyString(), anyString()))
+                .thenReturn(new LlmResponse("-0.5", 10, 5, "gpt-4o"))
+                .thenReturn(new LlmResponse("0.8", 10, 5, "gpt-4o"));
+
+        service.evaluate("question", "context", "answer");
+
+        DistributionSummary faithfulness = meterRegistry.summary("rag.evaluation.faithfulness", "provider", "openai");
+        assertThat(faithfulness.totalAmount()).isCloseTo(0.0, within(0.001));
+    }
+
     // 5. evaluate_llmThrows_doesNotPropagateException
     @Test
     void evaluate_llmThrows_doesNotPropagateException() {

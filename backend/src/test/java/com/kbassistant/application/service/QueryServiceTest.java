@@ -197,6 +197,38 @@ class QueryServiceTest {
     }
 
     @Test
+    void query_withOllamaEmbeddingProvider_usesLowerSimilarityThreshold() {
+        QueryService ollamaService = new QueryService(
+                embeddingPort, vectorStorePort, llmPort, documentRepository,
+                evaluationService, 0.75, 10, "openai", meterRegistry, 0.5, "ollama");
+
+        when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
+        when(vectorStorePort.similaritySearch(any())).thenReturn(List.of());
+
+        ollamaService.query("question", List.of());
+
+        verify(vectorStorePort).similaritySearch(argThat(req ->
+                Math.abs(req.similarityThreshold() - 0.5) < 0.001
+        ));
+    }
+
+    @Test
+    void query_callsEvaluationService_afterSuccessfulQuery() {
+        Document doc = Document.create("Guide", "guide.pdf", MimeType.PDF, 1000L, "user");
+        DocumentChunk chunk = DocumentChunk.create(doc.id(), 0, "content", new float[768], 4);
+
+        when(embeddingPort.embed(anyList())).thenReturn(List.of(new float[768]));
+        when(vectorStorePort.similaritySearch(any())).thenReturn(List.of(new ScoredChunk(chunk, 0.9)));
+        when(documentRepository.findById(doc.id())).thenReturn(Optional.of(doc));
+        when(llmPort.complete(anyString(), anyList(), anyString()))
+                .thenReturn(new LlmResponse("my answer", 100, 50, "gpt-4o"));
+
+        queryService.query("my question", List.of());
+
+        verify(evaluationService).evaluate(eq("my question"), anyString(), eq("my answer"));
+    }
+
+    @Test
     void query_twoArgOverload_passesEmptyHistory() {
         Document doc = Document.create("Guide", "guide.pdf", MimeType.PDF, 1000L, "user");
         DocumentChunk chunk = DocumentChunk.create(doc.id(), 0, "content", new float[768], 4);

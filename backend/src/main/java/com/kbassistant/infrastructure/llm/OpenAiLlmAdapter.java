@@ -60,7 +60,7 @@ public class OpenAiLlmAdapter implements LlmPort {
         );
     }
 
-    private LlmResponse fallback(String systemPrompt, List<ChatTurn> history, String userPrompt, Throwable t) {
+    LlmResponse fallback(String systemPrompt, List<ChatTurn> history, String userPrompt, Throwable t) {
         log.warn("LLM unavailable (circuit breaker or max retries): {}", t.getMessage());
         return new LlmResponse(
                 "The AI service is temporarily unavailable. Please try again in a moment.",

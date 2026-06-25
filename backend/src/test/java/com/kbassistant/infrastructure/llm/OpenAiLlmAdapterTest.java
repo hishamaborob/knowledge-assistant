@@ -15,7 +15,7 @@ import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.ollama.OllamaChatModel;
+import org.springframework.ai.openai.OpenAiChatModel;
 
 import java.util.List;
 
@@ -24,24 +24,24 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class OllamaLlmAdapterTest {
+class OpenAiLlmAdapterTest {
 
-    @Mock OllamaChatModel chatModel;
-    OllamaLlmAdapter adapter;
+    @Mock OpenAiChatModel chatModel;
+    OpenAiLlmAdapter adapter;
 
     @BeforeEach
     void setUp() {
-        adapter = new OllamaLlmAdapter(chatModel, "llama3.2");
+        adapter = new OpenAiLlmAdapter(chatModel, "gpt-4o");
     }
 
     @Test
-    void complete_returnsLlmContent() {
+    void complete_returnsLlmResponseWithContentAndModelName() {
         doReturn(responseWith("The answer is 42.")).when(chatModel).call((Prompt) any());
 
         LlmResponse result = adapter.complete("You are a helpful assistant.", "What is the answer?");
 
         assertThat(result.content()).isEqualTo("The answer is 42.");
-        assertThat(result.modelUsed()).isEqualTo("llama3.2");
+        assertThat(result.modelUsed()).isEqualTo("gpt-4o");
     }
 
     @Test
@@ -52,7 +52,10 @@ class OllamaLlmAdapterTest {
 
         ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call((Prompt) captor.capture());
-        assertThat(captor.getValue().getInstructions()).hasSize(2);
+        List<Message> messages = captor.getValue().getInstructions();
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(0).getMessageType()).isEqualTo(MessageType.SYSTEM);
+        assertThat(messages.get(1).getMessageType()).isEqualTo(MessageType.USER);
     }
 
     @Test

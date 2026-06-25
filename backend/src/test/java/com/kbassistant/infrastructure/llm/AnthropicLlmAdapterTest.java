@@ -89,6 +89,16 @@ class AnthropicLlmAdapterTest {
         assertThat(messages.get(3).getText()).isEqualTo("second question");
     }
 
+    @Test
+    void fallback_returnsUnavailableLlmResponse() {
+        LlmResponse result = adapter.fallback("sys", List.of(), "user", new RuntimeException("timeout"));
+
+        assertThat(result.content()).contains("temporarily unavailable");
+        assertThat(result.modelUsed()).isEqualTo("unavailable");
+        assertThat(result.promptTokens()).isZero();
+        assertThat(result.completionTokens()).isZero();
+    }
+
     // -------------------------------------------------------------------------
 
     private static ChatResponse responseWith(String text) {
